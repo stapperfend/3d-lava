@@ -1,0 +1,2155 @@
+﻿Total pages: 62
+
+============================================================
+PAGE 1
+============================================================
+Band
+1
+Induction Heating System
+Series i-class compact
+EN
+Operating Manual
+Stand: 800 0031.02, 16.10.2025
+
+============================================================
+PAGE 2
+============================================================
+INDUCTION HEATING SYSTEM
+Note!
+This operating manual is required for the safe operation of the induction generator. As such, the
+manual must be kept in close proximity to the device.
+COBES GmbH shall not be liable for any mistakes in this documentation. Liability for direct and
+indirect damage arising from the delivery or use of this documentation shall be excluded as far as is
+legally permissible.
+Every attempt has been made to describe the product as accurately as possible within this docu-
+mentation. However, no warranty about specific properties or the outcomes of operating the device
+is implied. We always welcome notifications of any errors as well suggestions and comments.
+Unless otherwise stated, the technical specification of the product at the time of its combined delivery
+with the documentation by COBES GmbH shall apply. We reserve the right to make technical
+changes without prior notification. Previous documentation shall cease to be valid in such a case.
+Please call us if you have any questions or problems with the installation and start-up. WeÔÇÖll be only
+too happy to help you.
+┬®COBES GmbH
+Rudolf-Hell-Str. 8a
+77955 Ettenheim
+Telephone: +49 (0)7822 78724-0
+Fax: +49 (0) 7822 78724-59
+E-Mail: info@cobes.de
+Homepage: http://www.cobes.de
+I
+
+============================================================
+PAGE 3
+============================================================
+INDUCTION HEATING SYSTEM
+Table of Contents
+1. Scope of application ............................................................................................................ - 2 -
+1.1 General information ...................................................................................................... - 2 -
+1.2 Device designation and type ......................................................................................... - 2 -
+1.3 EU Declaration of Conformity ........................................................................................ - 2 -
+1.4 Directives and standards .............................................................................................. - 2 -
+1.5 Warranty ....................................................................................................................... - 2 -
+2. Instructions for Safe operation ............................................................................................. - 3 -
+2.1 Warning notices ............................................................................................................ - 3 -
+2.2 Additional symbols ........................................................................................................ - 3 -
+2.3 Operator obligations ..................................................................................................... - 4 -
+2.4 Maintenance book ........................................................................................................ - 4 -
+2.5 Safety instructions ........................................................................................................ - 4 -
+2.6 Dangers in the operating room ...................................................................................... - 5 -
+2.7 Danger due to electrical voltage ................................................................................... - 5 -
+2.8 Danger points during maintenance and repair .............................................................. - 6 -
+2.9 Safety devices .............................................................................................................. - 6 -
+2.10 Emergency measures ............................................................................................... - 6 -
+3. Intended use ....................................................................................................................... - 7 -
+3.1 Impermissible modes of operation ................................................................................ - 7 -
+3.2 Work rules .................................................................................................................... - 7 -
+4. Scope of delivery ................................................................................................................. - 8 -
+4.1 Spare parts and accessories ......................................................................................... - 8 -
+4.2 Options ......................................................................................................................... - 8 -
+4.3 Necessary requirements on the customer side ............................................................. - 9 -
+5. Description of the device ................................................................................................... - 10 -
+5.1 Components and their function ................................................................................... - 10 -
+5.2 Range of applications ................................................................................................. - 11 -
+5.3 Technical data ............................................................................................................. - 11 -
+5.4 Options ....................................................................................................................... - 11 -
+6. Transport, set up, installation and initial start-up ................................................................ - 12 -
+6.1 Transport and storage ................................................................................................. - 12 -
+6.2 Unpacking ................................................................................................................... - 13 -
+6.3 Connection ................................................................................................................. - 13 -
+6.3.1 Procedure ............................................................................................................ - 14 -
+6.3.2 Connecting the inductor ....................................................................................... - 14 -
+6.3.3 Connecting the cooling water supply ................................................................... - 15 -
+6.3.4 Pin assignment of flow sensor connection cable .................................................. - 16 -
+II
+
+============================================================
+PAGE 4
+============================================================
+INDUCTION HEATING SYSTEM
+6.3.5 Connecting control circuits ................................................................................... - 16 -
+6.3.6 Connecting the power supply ............................................................................... - 18 -
+6.3.7 Interlock contacts ................................................................................................. - 19 -
+6.3.8 Performance Level ............................................................................................... - 20 -
+6.3.9 Connecting additional generators ........................................................................ - 21 -
+6.3.10 Connecting the secondary capacitor ................................................................ - 21 -
+6.4 Changing the IP configuration ..................................................................................... - 22 -
+6.5 Status display ............................................................................................................. - 23 -
+6.6 Switching on the device .............................................................................................. - 23 -
+6.7 Switching off the device .............................................................................................. - 23 -
+6.8 Disassembly, packaging ............................................................................................. - 24 -
+7. Working with the device..................................................................................................... - 25 -
+7.1 Operating the device ................................................................................................... - 25 -
+7.2 Error messages .......................................................................................................... - 25 -
+7.3 Maintenance ............................................................................................................... - 25 -
+8. Technical specifications ..................................................................................................... - 27 -
+9. Appendix ........................................................................................................................... - 28 -
+9.1 Quick overview of process data (UDP control) ............................................................ - 28 -
+9.1.1 PLC output data ................................................................................................... - 28 -
+9.1.2 SPS-Eingangsdaten ............................................................................................ - 29 -
+9.2 Process image PLC input data (ICC ÔåÆ PLC) .............................................................. - 30 -
+9.2.1 Inverter status word ÔÇô status bit field .................................................................... - 30 -
+9.2.2 Controller status word ÔÇô process status bitfield .................................................... - 31 -
+9.2.3 Instantaneous value of primary current ................................................................ - 32 -
+9.2.4 Instantaneous value phase shift primary current .................................................. - 32 -
+9.2.5 Instantaneous value frequency ............................................................................ - 32 -
+9.2.6 Instantaneous power value .................................................................................. - 32 -
+9.2.7 Instantaneous value of capacitor voltage ............................................................. - 32 -
+9.2.8 Instantaneous value of DC link voltage ................................................................ - 32 -
+9.2.9 Instantaneous value of energy meter ................................................................... - 33 -
+9.2.10 Instantaneous value of cooling water flow rate ................................................. - 33 -
+9.2.11 Instantaneous value of temperature sensor ......................................................... - 33 -
+9.2.12 Instantaneous value of heating program phase ................................................ - 33 -
+9.2.13 Current value of heating program phase .......................................................... - 33 -
+9.2.14 Status state machine ÔÇô state ............................................................................ - 34 -
+9.2.15 Status word error .............................................................................................. - 35 -
+9.2.16 Status word error current heating program ....................................................... - 36 -
+9.2.17 Energy meter for heating phases for current heating program .......................... - 36 -
+9.2.18 Temperature value of the heating phases for the current heating program ....... - 36 -
+III
+
+============================================================
+PAGE 5
+============================================================
+INDUCTION HEATING SYSTEM
+9.3 Process image PLC output data (PLC ÔåÆ ICC) ............................................................ - 37 -
+9.3.1 Control word converter ÔÇô control bitfield ............................................................... - 37 -
+9.3.2 Target current setting ÔÇô target current (input) ....................................................... - 38 -
+9.3.3 Power setpoint specification ÔÇô target power (input) .............................................. - 38 -
+9.3.4 Setpoint specification for heating program ........................................................... - 38 -
+9.4 Service communication ............................................................................................... - 39 -
+9.5 Heating programs ....................................................................................................... - 39 -
+9.5.1 ransferring a heating program .............................................................................. - 39 -
+9.5.2 Reading a heating program ................................................................................. - 40 -
+9.6 Establishing a heating phase ...................................................................................... - 41 -
+9.7 Monitoring functions .................................................................................................... - 42 -
+9.7.1 Missing master life bit .......................................................................................... - 42 -
+9.7.2 Timeout due to absence of master telegrams ...................................................... - 42 -
+9.8 PLC control ................................................................................................................. - 43 -
+9.8.1 Settings ............................................................................................................... - 44 -
+9.8.2 Description of the start screen ............................................................................. - 45 -
+9.8.3 Error Page PLC Control ....................................................................................... - 47 -
+9.8.4 Heating programs ................................................................................................ - 50 -
+9.9 Circuit diagrams, technical drawings ........................................................................... - 51 -
+9.10 Cooling water requirements ..................................................................................... - 53 -
+9.11 Dew point diagram .................................................................................................. - 55 -
+9.12 Drawings ................................................................................................................. - 56 -
+IV
+
+============================================================
+PAGE 6
+============================================================
+Chapter
+E
+INDUCTION HEATING SYSTEM
+Introduction
+This operating manual describes a medium-frequency generator for the inductive heating of electri-
+cally conductive workpieces. For this purpose, the induction generator generates an alternating mag-
+netic field in an induction coil at a frequency of MF 20 - 100 kHz.
+The induction generator consists of the generator itself and the induction coil, which is connected to
+the generator.
+These components must be supplied with cooling water from a cooling unit.
+To prevent incorrect operation and damage to both the operator and the device, the operating instruc-
+tions and safety instructions must be read and observed before commissioning the induction gener-
+ator to ensure safe use.
+All persons entrusted with the use of the induction generator must also be familiar with the operating
+instructions and observe them before using the device for the first time.
+Keep the operating instructions in a safe place so that the information they contain is available to you
+at all times.
+No excerpts from these operating instructions may be reproduced, stored in a data processing sys-
+tem, or transmitted without the prior written consent of COBES GmbH.
+COBES GmbH reserves the right to make technical and visual changes at any time without prior
+notice in the course of further development. All dimensions, information, and specifications in this
+operating manual are therefore subject to change without notice. Legal claims based on the operating
+manual cannot therefore be asserted.
+- 1 -
+
+============================================================
+PAGE 7
+============================================================
+Chapter
+1
+INDUCTION HEATING SYSTEM
+1. Scope of application
+1.1 General information
+This operating manual applies to the i-class compact (ICC) series induction generator and the as-
+sociated connecting cables.
+1.2 Device designation and type
+Device designation Device type Serial No.
+Induction heating generator
+1 - 5kW MF 20 - 100 kHz 20JJ-MM-XXXX
+Serie i-class compact
+1.3 EU Declaration of Conformity
+We, COBES GmbH, Rudolf-Hell-Str. 8A, D-77955 Ettenheim, hereby declare that the above-men-
+tioned device complies with the relevant basic safety and health requirements of the EU Directive
+due to its design and construction as well as the version we have placed on the market. This decla-
+ration loses its validity in the event of any changes not agreed with us. The EMC-compliant design
+refers only to the designated device. If the device is expanded to form a system, the operator is
+responsible for compliance with EMC requirements and personal safety.
+1.4 Directives and standards
+EU Directives:
+Directive of the European Parliament and of the Council of Feb-
+ruary 25, 2014, on the harmonization of the laws of Member
+2014 / 35 / EU States relating to the making available on the market of electrical
+equipment designed for use within certain voltage limits (Low
+Voltage Directive)
+Directive of the European Parliament and of the Council of Feb-
+ruary 26, 2014, on the harmonization of the laws of Member
+2014 / 30 / EU
+States relating to electromagnetic compatibility
+(EMC Directive)
+Standards taken into consideration:
+Safety in electrical heating installations and installations for elec-
+DIN EN 60519-1:2020-12
+tromagnetic processing Part 1: General requirements
+Part 3: Special requirements for inductive and conductive heat-
+DIN EN 60519-3:2018-03
+ing and processing equipment
+Safety requirements for electrical measuring, control, and labor-
+DIN EN 61010-1:2020-03
+atory equipment Part 1: General requirements
+Electromagnetic compatibility (EMC) - Part 6-2:
+DIN EN 61000-6-2:2020-05
+Generic standards - Immunity for industrial environments
+Electromagnetic compatibility (EMC) - Part 6-4:
+DIN EN 61000-6-4:2021-10 Generic standards - Emission standard for industrial environ-
+ments
+1.5 Warranty
+COBES devices are manufactured and undergo final inspections using pretested material. If,
+however, grounds for a complaint exist, the material and manufacturing defects are covered by a
+warranty usually extending for a period of 12 months from the date of purchase. Wearing parts,
+particularly hose cables, are not covered by the warranty.
+Exclusion of warranty
+Damage caused by improper use or tampering with the device is excluded from this warranty.
+- 2 -
+
+============================================================
+PAGE 8
+============================================================
+Chapter
+2
+INDUCTION HEATING SYSTEM
+2. Instructions for Safe operation
+2.1 Warning notices
+Grading of the warning notices
+Warning notices are prefixed by the following signal words denoting the type of danger:
+Ô×ö Caution warns of material damage.
+Ô×ö Warning warns of personal injury.
+Ô×ö Danger warns of fatal injuries.
+Structure of the warning signs
+WHQuelle
+´â£ WHMa├ƒnahme
+Signal word
+2.2 Additional symbols
+Explanation of symbols
+Symbol Text Explanation
+Important information in the operating manual on optimal
+Note!
+use of the device.
+This symbol warns of dangers to the product. Failure to
+heed this warning may result in material damage and, in
+Attention!
+extreme cases, in the complete destruction of the prod-
+uct and adjoining parts of the plant.
+This symbol warns of dangers from electric voltage. Fail-
+ure to heed this warning may result in an electric shock
+Electric shock!
+with all the known injuries this can cause, including fatal
+injuries.
+Electromagnetic This symbol warns of dangers from electromagnetic
+fields! fields.
+These signs warn of dangers posed by high-frequency
+radiation. People with pacemakers or implants, as well
+as pregnant women, must not remain in areas marked in
+High frequency!
+this way, as high-frequency radiation can interfere with
+the functioning of pacemakers and cause implants to
+heat up.
+Handling instructions
+Structure of the instructions:
+´â£ Instructions on handling.
+Indication of an outcome, if necessary.
+- 3 -
+
+============================================================
+PAGE 9
+============================================================
+Chapter
+2
+INDUCTION HEATING SYSTEM
+Lists
+Structure of unnumbered lists:
+ÔÇó List level 1
+´éÄ List level 2
+Structure of numbered lists:
+1. List level 1
+2. List level 1
+2.1 List level 2
+2.2 List level 2
+2.3 Operator obligations
+In addition to complying with the statutory provisions that the manufacturer must comply with, the
+operator must also comply with and implement the legal obligations in force at the workplace e.g.
+the duty to provide instructions, the legislation concerning health and safety at work as well as
+other regulations and laws in force. The operator must draw up written instructions for working on
+and
+with the plant based on the operating manual and the work to be carried out. These instructions
+must be available in a comprehensible form in the employeesÔÇÖ own language and must be made
+known to them.
+2.4 Maintenance book
+We recommend that a maintenance book be kept for recording inspections as well as all essential
+work (e.g. repairs, modifications). Keep this operating manual in a safe place so that the safety
+instructions and important instructions for use it contains are always available for reference.
+2.5 Safety instructions
+The safety instructions relating to the protection of persons, handling of the device, and the work-
+piece are largely dependent on the behavior of the persons working with the device. Before commis-
+sioning, read the operating instructions carefully and observe the information provided in order to
+avoid errors and any resulting damage, in particular damage to health. In addition to the information
+in this operating manual, the applicable national laws, regulations, and guidelines must be observed
+for installation and operation.
+Work on the electronic equipment of the device may only be carried out by trained service personnel
+and in a safe condition (de-energized). Only approved original spare parts and accessories may be
+used. The use of other parts involves unknown risks and must be avoided in all cases.
+The functionality and safety of the device is only guaranteed if the necessary tests, maintenance,
+and repair work are carried out by COBES or by trained personnel.
+COBES is not liable for any damage to the device resulting from improper repairs not carried out by
+COBES, or if original spare parts/accessories are not used when replacing parts.
+- 4 -
+
+============================================================
+PAGE 10
+============================================================
+Chapter
+2
+INDUCTION HEATING SYSTEM
+2.6 Dangers in the operating room
+The emission of electromagnetic fields depends on the application. In principle, the operator of the
+system is responsible for the safety of persons in electromagnetic fields (EMF). We are happy to
+assist with on-site measurements in accordance with the applicable regulations of the relevant em-
+ployers' liability insurance association.
+Alternating electromagnetic fields can have an undesirable, harmful effect on active and passive
+body aids as well as future life (pacemakers, implants, pregnancy, etc.).
+Persons with active and passive body aids and pregnant women must not be in the area af-
+fected by the device.
+Danger! ´â£ Attach the supplied adhesive labels "Prohibition for pacemaker wearers", etc. to all devices
+that are operated with induction
+Strong electromagnetic fields occur in the area of the inductor coil. The user is responsible for
+compliance with the permissible limit values at the installation site. The guidelines applicable at
+the installation site apply.
+Danger!
+2.7 Danger due to electrical voltage
+The induction generator converts low-frequency electrical mains energy into medium-frequency
+electrical energy. The resulting voltages are life-threatening!
+´â£ Never open the generator while it is connected to the mains supply.
+Danger!
+Dangerous voltages!
+Dangerous voltages are present at the inductor when the generator is switched on.
+´â£ Fit suitable covers and safety devices to protect against contact!
+Danger!
+Attach a suitable warning sign with the five symbols in the area of the inductor coil:
+Illustration 1: Warning signs for induction systems
+- 5 -
+
+============================================================
+PAGE 11
+============================================================
+Chapter
+2
+INDUCTION HEATING SYSTEM
+2.8 Danger points during maintenance and repair
+The induction generator must be connected by the system manufacturer to a 3-phase mains supply
+with a protective earth conductor in accordance with the applicable regulations.
+There are no wearing parts or parts requiring maintenance in the generator itself. The generator
+must therefore be sent to the manufacturer for repairs.
+Dangerous voltages!
+As soon as the generator is connected to the supply voltage, dangerous voltages may be present
+in the generator.
+´â£ Before opening the generator, remove all plugged-in cables.
+Danger! ´â£ The generator may only be opened by the manufacturer!
+2.9 Safety devices
+Note!
+As the operator, it is your responsibility to ensure that the HF generator operates safely. You are
+responsible for familiarizing yourself with and applying the statutory provisions that must be
+complied with.
+Personal protection
+In induction applications, the induction coil (inductor) must be protected from contact by the operator,
+as a dangerous voltage is present there when the generator is in operation.
+Safety circuit
+To switch off the output power of the generator, the system manufacturer must ensure that the mains
+connection to the generator is interrupted in the event of a fault. The need to integrate additional
+switching devices depends on the desired performance level. A suggestion for the design can be
+found in chapter 6.3 ÔÇ£ConnectingÔÇØ.
+System protection
+To protect the generator itself and connected devices, the generator switches off the output power
+in the event of:
+ÔÇó Overtemperature
+ÔÇó cooling water flow is missing/low
+ÔÇó Safety circuit error (interlock open)
+ÔÇó Communication error in serial operation
+Please note that this only switches off the internal electronics and the MF voltage. This is not a safety
+function that affects protection against accidental contact. The generator must be disconnected from
+the mains for personal protection.
+2.10 Emergency measures
+In an emergency, take the following measures immediately in the order described:
+ÔÇó 1. switch off the external mains disconnecting device for the generator. (PL at least D)
+ÔÇó 2. switch off the cooling water supply for the generator.
+ÔÇó 3. extinguish fires with suitable extinguishing agents.
+´â£ Do not extinguish fires with water, due to the mains voltages present, but use suitable
+extinguishing agents.
+Danger!
+- 6 -
+
+============================================================
+PAGE 12
+============================================================
+Chapter
+3
+INDUCTION HEATING SYSTEM
+3. Intended use
+The induction generator generates process energy that is introduced into the workpiece via a current-
+carrying coil, the inductor. Excitation of the inductor at medium frequency (MF) generates an alter-
+nating magnetic field. If a conductive workpiece is in this field, it is heated with a high energy density.
+Depending on the frequency of the alternating field, the workpiece only heats up on the surface. All
+electrically conductive and semi-conductive materials can therefore be heated by alternating elec-
+tromagnetic fields. Up to the Curie point (loss of magnetic properties), which is approx. 730┬░C for
+steel, magnetic materials can be heated particularly well by induction. For temperatures above the
+Curie point, significantly more generator power must be installed. This also applies to highly conduc-
+tive materials such as copper, aluminum, etc. The higher the operating frequency of the generator,
+the less deeply the field lines penetrate the material. With longer exposure times, however, heating
+can also be achieved due to heat conduction in the workpiece. In order to heat a so-called surface
+layer (e.g. hardening of steel), the workpiece is heated very quickly above the structure transfor-
+mation temperature and then cooled just as quickly with a quenching spray (usually an oil-water
+mixture emulsion). This results in a narrow-hardened zone (surface layer) on the one hand, and
+prevents the transformation of the microstructure in the rest of the workpiece on the other, thus
+maintaining the hardness there.
+The most common applications are Bonding, joining, soldering, melting, forging, hardening, pre/post-
+heating, tempering, sealing and many more.
+3.1 Impermissible modes of operation
+The induction generator may only be used for its intended purpose. In particular, it may not be used
+ÔÇó for medical purposes,
+ÔÇó for radio engineering purposes,
+ÔÇó in rooms with an explosive atmosphere
+3.2 Work rules
+´â£ If particular problems occur that are not covered in sufficient detail in these instructions for use,
+please contact the supplier for your own safety.
+Attention!
+´â£ Put on the required personal protective equipment, e.g. hand, face and body protection,
+remove any jewelry beforehand.
+Attention!
+Only use the system for its intended purpose.
+In particular, it is not permitted to use:
+´â£ for medical technology purposes,
+´â£ for radio technology purposes,
+Attention!
+´â£ in rooms with explosive atmospheres
+- 7 -
+
+============================================================
+PAGE 13
+============================================================
+Chapter
+4
+INDUCTION HEATING SYSTEM
+4. Scope of delivery
+Part number Designation/model Quantity
+126 00xx Induction generator 5kW, 20-100kHz, xx Wdg. 1
+126 0075 Induction generator 5kW, 20-100kHz, 28 Wdg.
+126 0081 Induction generator 5kW, 20-100kHz, 18 Wdg.
+Upon delivery of the device, check that the components are in perfect condition. Please contact
+COBES if you have any complaints.
+4.1 Spare parts and accessories
+Part number Designation/model Quantity
+559 0103 O-Ring, d=6x2,0, NBR, 70A
+552 0041 Scheibe, F├ñcher-, DIN 6798, A5,3, Bronze
+550 0217 Schraube, Zylinder-, Inn-6kt, M5x20, DIN 912, A2
+4.2 Options
+Part number Designation/model Quantity
+309 0003 Zubeh├Ârpaket, ICC, Standard 1
+575 0110 Stecker, T├╝llengeh├ñuse HAN 3 A, gerade, M20 1
+562 0011 Verschraubung, Kabel-, M 20x1,5 EMV, 8-11 1
+251 0178 Kabel, 4G2.5, ├ÿ=8.9, grau, ├ûlflex 3m
+575 0066 Buchse, Kontakt 2,5mm┬▓ gedr., HAN C, Crimp Female 4
+575 0106 Stecker, Einsatz, 4-pol., Han Q3/0-M-Crimp 1
+571 0018 Stecker, Netz, CeKon, 5-polig, 16A 1
+564 0093 Leiterplatte, Adapter 1
+563 0135 Kabel, Patchkabel, M8, RJ45, 2m 1
+563 0147 Kabel, Anschluss-, D-SUB 15 pol., St.- Bu., 2m 1
+309 0004 Anschraub-Set, Induktor, an ICC 1
+559 0103 O-Ring, d=6x2,0, NBR, 70A 3
+552 0041 Scheibe, F├ñcher-, DIN 6798, A5,3, Bronze 4
+550 0217 Schraube, Zylinder-, Inn-6kt, M5x20, DIN 912, A2 4
+309 0005 Zubeh├Ârpaket, ICC, Wasser 1
+661 0018 Sensor, Durchfluss-, Wasser, 0,9-15l/min 1
+651 0112 Verschraubung, ├£berwurf-, 3/4" IG auf 1/2" AG 2
+651 0088 Muffe, Innengewinde, rund, G1/2" 2
+651 0113 Verschraubung, Einschraub-, G1/2", 8mm, gerade 2
+661 0019 Str├Âmungsw├ñchter, Anschlussk. mit Buchse M12, 2m 1
+657 0025 Schlauch,TPE-U(PU), 8x1,25 transparent, au├ƒenkal. 6m
+- 8 -
+
+============================================================
+PAGE 14
+============================================================
+Chapter
+4
+INDUCTION HEATING SYSTEM
+4.3 Necessary requirements on the customer side
+The following requirements must be met by the customer before the generator can be put into oper-
+ation.
+Cooling water supply:
+A suitable cooling water supply must be ensured. The following values must be observed:
+ÔÇó Permissible cooling water temperature in the flow: 20 to 40 ┬░C
+ÔÇó Permissible flow rate: 1 to 8 l/min
+ÔÇó Permissible maximum pressure in the flow: 8 bar
+ÔÇó Differential pressure at the generator: approx. 3.5 bar (depending on the inductor)
+ÔÇó Outer diameter of hose: 8mm
+Power supply:
+A 400V, 16A three-phase connection (AC 3~In) is required to power the generator.
+In addition, a 24V ┬▒ 10 %, max. 3.5A power connection is required.
+Control:
+Digital communication see chapter Quick overview of process data (UDP control)
+- 9 -
+
+============================================================
+PAGE 15
+============================================================
+Chapter
+5
+INDUCTION HEATING SYSTEM
+5. Description of the device
+5.1 Components and their function
+The induction system essentially comprises the following components:
+ÔÇó Generator with connection for the inductor
+ÔÇó Inductor, for heating the workpiece
+Illustration 2: Schematic diagram of the system ready for operation
+The mains input voltage is fed to the rectifier via the 3AC IN mains connection. The inverter uses
+this DC voltage to generate the AC voltage in the range of 20-100 kHz, which is fed to the inductor
+via a transformer. The output power can be continuously adjusted between approx. 5 and 100%. The
+power control in the device is achieved via a variable frequency.
+For maximum power output, the system consisting of the generator-inductor-workpiece must be op-
+timally adjusted. If the adjustment is poor, the power output can be drastically reduced. COBES will
+be happy to assist you in adapting to new workpieces.
+- 10 -
+
+============================================================
+PAGE 16
+============================================================
+Chapter
+5
+INDUCTION HEATING SYSTEM
+5.2 Range of applications
+Typical areas of application
+The induction generator is designed as a stationary energy source for the inductive heating of elec-
+trically conductive materials at medium frequency. Typical areas of application are
+ÔÇó Bonding
+ÔÇó Joining
+ÔÇó Soldering
+ÔÇó Melting
+ÔÇó Forging
+ÔÇó Hardening
+ÔÇó Pre/post-heating
+ÔÇó Tempering
+ÔÇó Sealing
+5.3 Technical data
+Detailed information can be found in the enclosed documents technical specification and Cooling
+water specification
+5.4 Options
+COBES can support you in the procurement or dimensioning of a suitable cooling unit for the cooling
+water required in the generator. Please contact our staff for more information.
+- 11 -
+
+============================================================
+PAGE 17
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6. Transport, set up, installation and initial start-up
+6.1 Transport and storage
+Transport
+The transportation of the generator from the delivery vehicle to the final installation site must be
+prepared and carried out by the customer. After receipt of the generator:
+ÔÇó Immediately notify the carrier, the insurance company and COBES in writing of any transportation
+damage due to recourse claims.
+The induction generator is delivered in a cardboard box. It is protected with foam inserts and filling
+material during transportation.
+Storage
+If you do not install the components immediately after delivery, store it in the original packaging under
+the following ambient conditions:
+Temperature
+ÔÇó +10 ┬░C to +45 ┬░C Operation
+ÔÇó ÔÇô20 ┬░C to +55 ┬░C Storage
+ÔÇó ÔÇô20 ┬░C to +70 ┬░C Transport
+Relative humidity
+ÔÇó 10 % ÔÇô 90 % Operation1
+ÔÇó 30 % ÔÇô 95 % Storage
+ÔÇó 95 % Transport
+Air pressure22
+ÔÇó 800 hPa bis 1 013 hPa Operation
+ÔÇó 800 hPa bis 1 013 hPa Storage
+ÔÇó 660 hPa bis 1 013 hPa Transport
+1) No thawing and freezing.
+2) Max. 2,000 m above sea level.
+- 12 -
+
+============================================================
+PAGE 18
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.2 Unpacking
+Unpack the components of the HF generator carefully. The components are delivered with all of
+the connections required for the initial start-up already made.
+Packaging material
+Dispose of the packaging materials in accordance with the relevant waste disposal regulations
+unless you intend to save them to transport the device at a later date. The following materials are
+used as packaging depending on the type of transport:
+ÔÇó Plastic foil (PE) to protect the device
+ÔÇó Cartons
+ÔÇó Foam inserts and foam padding
+All packaging materials must be disposed of in accordance with the relevant waste disposal regula-
+tions applying to the area where the device is delivered.
+6.3 Connection
+Dangerous voltage!
+Touching the supply voltage can result in fatal injuries! Therefore do not make any connections
+unless the components have been disconnected from the supply voltage.
+Danger!
+Note!
+According to EN ISO 13849-1:2015 (transition period until May 15, 2027), safety for man and ma-
+chine is divided into risk categories or performance levels. This device achieves performance level
+PLd with an upstream isolating device.
+The electrical connection may only be carried out by qualified and trained electricians. These spe-
+cialists must be informed about the applicable safety regulations
+at the installation site for setting up electrical installations and apply them. Improper installation can
+result in danger to life due to electrical voltages and leakage currents!
+If you include an emergency stop switch, you must install it in such a way that it triggers the external
+mains disconnection device in accordance with PLd when actuated.
+The disconnection of the cooling water supply depends on the respective application.
+- 13 -
+
+============================================================
+PAGE 19
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.1 Procedure
+Always connect the cooling water supply first and check it for leaks before continuing with the elec-
+trical installation.
+Proceed in the following order:
+ÔÇó Connect the inductor
+ÔÇó Connect the cooling water supply
+ÔÇó Connecting the control circuits
+ÔÇó Connecting the power supply
+6.3.2 Connecting the inductor
+Place the supplied sealing rings (see illustration) between the inductor and the inductor connection
+jaw and screw the inductor to the inductor connection jaws. Only use the screws supplied for this
+purpose. Never use conventional steel screws! The recommended tightening torque is 2 Nm.
+4 x M5 Thread 2 x O-Ring
+Illustration 1: Inductor connection jaws (for connecting the inductor)
+´â£ Make sure that the O-rings supplied are correctly inserted in the inductor connection jaws.
+´â£ Never use steel screws to mount the inductor!
+´â£ The operator must protect the inductor from contact!
+Attention!
+- 14 -
+
+============================================================
+PAGE 20
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.3 Connecting the cooling water supply (Note the cooling water supply!)
+Connect the cooling water hoses to the generator as shown in the following illustration. Make sure
+that you do not mix up the supply and return lines. Also observe the cooling water plan and the
+cooling water quality requirements.
+ÔÇó Connect the cooling water supply to the ÔÇ£cooling water supplyÔÇØ cooling water connection
+ÔÇó Connect the return line of the cooling water to the ÔÇ£Cooling water returnÔÇØ connection
+ÔÇó Connect the cooling water return line to the flow sensor
+ÔÇó Connect the flow sensor to the cooling water supply
+Cooling water return
+Cooling water supply
+Permissible cooling water temperature in the flow: 20 to 40 ┬░C
+Permissible volume flow: 1 to 8 l/min
+Permissible maximum pressure in the flow: 8 bar
+Illustration 2: Cooling water connections on the generator
+Cooling water return Cooling water return
+Cooling system generator
+Illustration 3: Cooling water connection on the flow sensor
+The connections are designed for externally calibrated TPE-U(PU) 8x1.25mm and only need to be
+plugged in.
+After the cooling water connections have been made, check that the cooling system is tight:
+ÔÇó Before switching on the cooling water supply, check again that all water connections are tight.
+ÔÇó Switch on the cooling water supply slowly until the generator is completely filled with water and
+the system is free of air.
+ÔÇó Immediately after switching on, check all connections and water screw connections for leaks.
+ÔÇó Switch the cooling water supply off again.
+The flow connections of the generator should be fitted with a water filter. Only operate the generator
+with water filters, otherwise dirt particles may enter the cooling system and cause damage!
+Note!
+´â£ The operator must ensure that the appliance is water-cooled.
+´â£ Only operate the generator via a dirt particle filter.
+´â£ The flow monitor must always be installed in the return flow.
+- 15 -
+
+============================================================
+PAGE 21
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.4 Pin assignment of flow sensor connection cable
+Cable: IFM - EVC004
+1-white 4-blue
+5-black
+Current output
+6.3.5 Connecting control circuits
+The user interfaces are located on the rear of the generator.
+J9201
+J4001
+Link-LEDs
+grounding lug M4
+CPU-LED
+J4002
+J9301
+3AC Out 3AC In
+Illustration 6: Connections on the generator
+- 16 -
+
+============================================================
+PAGE 22
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+Connecting system plug connectors (supply, control, sensor connections)
+Plug connector: D-Sub plug connector, 15-pin
+Conec 15-006503 (socket), Conec 15-006453(plug))
+Common, looped-through signals on J4001 and J4002:
+Pin Designation Function
+1, 2, 9 24V Power supply of the control section. 24V ┬▒ 10 %
+3, 10, 11 0V Max. Current consumption: 3.5A
+4, 12 ILK1, ILK2 Interlock signals (pin 4 ÔåÆ 24V external)
+Connector J4001 is used as an input for the following signals:
+Pin Designation Function
+5 FLOW_P Power supply and sensor input of the flow sensor,
+13 FLOW_N FLOW_P against FLOW_N supplies the voltage,
+the current flowing in FLOW_N represents the measurement signal
+6 PYRO_P Pyrometer connection, current input
+(4...20mA interface, internal 100╬® measuring resistor)
+14 PYRO_N Pyrometer connection, signal ground
+7 L+_CON 24 volt supply voltage for pyrometer
+(related to PYRO_N)
+8 TC_N_CON Thermocouple, - connection
+15 TC_P_CON Thermocouple, + connection
+Analog input thermocouple
+A type K thermocouple can be connected to contacts 8 and 15 in connector J4001 for temperature
+detection. The polarity of the thermocouple must be taken into account!
+Analog input pyrometer
+A pyrometer with a 4...20 mA interface can be connected to contacts 6 and 14 in connector J4001
+for temperature measurement. 24 volts can be tapped at pin 7 to supply the pyrometer with power.
+Connecting the network interface
+Plug connector: M8 plug connector, 4-pin, female, A-coded
+Phoenix Contact 1412228
+Both connectors are interconnected by a 2-port switch to enable network traffic from one port to the
+other and thus a line topology.
+Both ports support 10/100 Mbit/s and HP Auto-MDIX.
+Pin assignment on connectors J9201 and J9301:
+Pin Designation Function
+1 TD+ Transmit-Data Differential pair
+4 TD-
+2 RD+ Receive-Data Differential pair
+3 RD-
+The power cables must be laid in accordance with VDE 0298, Part 4, installation type E.
+- 17 -
+
+============================================================
+PAGE 23
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.6 Connecting the power supply
+Dangerous voltage!
+´â£ Before connecting the mains cable, make sure that the disconnecting device in the external
+installation is open and secured against being switched on again.
+Danger!
+Three-phase input (AC 3~ In)
+Connectors: Harting Han 3A plug flanges (item no. 09200030301)
+AC input with pin contact plug insert (item no. 09120033151)
+AC output with socket contact plug insert (item no. 09120033051)
+Coding: None
+Pin Designation Function
+1 L1 Three-phase current input 400V
+2 L2
+3 L3
+PE PE connection Protective earth
+Note!
+Permissible earthing types: ÔÇó Neutral conductor to earth potential
+The following earthing types are not permitted: ÔÇó Outer conductor to earth potential
+ÔÇó Insulated (not earthed)
+Note!
+The mains input is not internally protected against overload.
+An external fuse is therefore required to ensure line protection.
+Once all electrical connections have been made, check that all plugs and cables are secure.
+Equipotential bonding on the generator
+There is an earthing lug with a hole for an M4 screw between the cooling water inlets and outlets.
+An equipotential bonding conductor must be connected here in accordance with DIN VDE 0100, Part
+540.
+Connection for potential equalization on the generator
+Illustration 4: Equipotential bonding on the generator
+- 18 -
+
+============================================================
+PAGE 24
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.7 Interlock contacts
+The following shows two ways in which the two interlock contacts can be wired.
+Option 1 (Figure 7) is sufficient for commissioning.
+Option 2 (Figure 8) offers a higher level of safety as no floating voltages occur.
+Note!
+COBES GmbH recommends option 2.
+Illustration 5: Option 1 Interlock circuit Illustration 6: Option 2 Interlock circuit
+- 19 -
+
+============================================================
+PAGE 25
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.8 Performance Level
+Note!
+The system manufacturer or operator is responsible for calculating the final performance level, taking
+into account the connection of the device in the system.
+The following measures must be observed when integrating the generator into the system.
+The following is designed to ensure a secure hold:
+-Blocking of the inverter's gate signals using discrete semiconductor components
+(deactivation of the drivers)
+-Blocking of the driver signals via the microcontroller control
+(software shutdown)
+-Disconnection of the driver operating voltage
+The following was evaluated for the consideration of dangerous DC voltage on the inductor
+system:
+Due to its design, the output transformer T1 can only transmit high-frequency AC voltages. The
+transformer is grounded on one side.
+Illustration 7: Schematic diagram of power section
+Fault case Inverter bridge (S1 and S2) low impedance:
+This leads to a short circuit in the DC link, which triggers the upstream fuse.
+Fault case low-resistance semiconductor (S1 or S2) of the inverter bridge:
+In this case, there is a DC voltage at the inverter bridge output. The primary capacitor (C3) would
+then function as a DC capacitor and prevent further currents from flowing through the transformer.
+Leakage currents in the capacitors can raise the potential of the primary winding to the positive or
+negative potential of the DC link. This potential difference is isolated by the transformer. If there is
+an additional insulation fault in the transformer, the currents are discharged via the grounding.
+Note!
+In case of doubt, COBES GmbH recommends installing a contactor in the supply voltage for safe
+shutdown.
+- 20 -
+
+============================================================
+PAGE 26
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.3.9 Connecting additional generators
+It is possible to connect up to three generators in series and install them. No additional power con-
+nections are required for connecting the generators in series, as these can be looped through from
+one generator to the next.
+Water can also be installed in series, depending on the inductor. For small inductor cross-sections,
+we recommend connecting the cooling water in parallel. In each configuration, each ICC requires its
+own water sensor.
+A Sub-D cable is plugged into connection J4002 on the first generator and into connection J4001 on
+the next generator.
+The network interface is connected at point J9201 on the first generator and at point J9301 on the
+second generator.
+In order to also supply the second generator with 400V, a connection is established from the first
+generator (3AC Out) to the second generator (3AC In).
+6.3.10 Connecting the secondary capacitor
+An additional secondary capacitor is required for certain applications. A special connection clamp is
+needed to connect this capacitor, which in this case is supplied by COBES. The connection clamp
+is screwed between the generator and the inductor. The inductor can then be attached as described
+in section 6.3.2 above.
+Here too, make sure that the O-rings are correctly inserted into the generator's inductor connection
+clamp. The technical drawing for this connection clamp can be found in the appendix.
+´â£ Ensure that the supplied O-rings are correctly inserted on the inductor connection jaws.
+´â£ Never use steel screws for assembly!
+´â£ Check the voltage resistance of the capacitors before commissioning!
+Attention!
+´â£ The connection jaw and secondary capacitor must be protected from contact by the operator.
+Induktor
+Illustration 8: Connecting the secondary capacitor
+- 21 -
+
+============================================================
+PAGE 27
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.4 Changing the IP configuration
+The IP configuration can only be changed or reset using the ÔÇ£IPConfigÔÇØ software.
+The IPConfig tool allows you to set the IP configuration, enable or disable DHCP, and set the host
+name of a device.
+IPConfig displays the currently set configuration. After changing the settings, the device must be
+restarted so that the new address configuration is applied.
+First, the ÔÇ£IPConfigÔÇØ program must be installed on the PC from the supplied USB stick. The next step
+is to connect the ICC generator to the PC via the network cable and connect a 24V power supply to
+the generator.
+Open the IPConfig tool on the computer. Select the computer's Ethernet interface in the ÔÇ£Scan on
+network interface:ÔÇØ field. Then click the ÔÇ£ScanÔÇØ button.
+Now you can select the generator and change the IP address by right-clicking. This will open the
+ÔÇ£Slave AddressingÔÇØ window. Uncheck the ÔÇÿDHCPÔÇÖ box (disable DHCP) to assign the desired IP ad-
+dress ÔÇ£XXX.XXX.XXX.XXXÔÇØ. After changing the IP address, it is necessary to briefly interrupt the 24
+V power supply in order to check the entered data again. If the data has been changed as desired,
+the program can be closed.
+Illustration 9: IPConfig-Tool
+Illustration 10: Slave address configuration
+- 22 -
+
+============================================================
+PAGE 28
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.5 Status display
+Status display Network interface
+The status of the network interface is indicated by the two link LEDs.
+LED-Status Status
+Off Network connection disconnected at the physical level
+Flashing Active data exchange
+Steady light Network connection established at the physical level
+Processor status display (MCU status)
+The status display via the CPU LED can be broken down as shown in the following table.
+LED-Color Function Slow flashing Ôëê 1 Hz; Fast flashing Ôëê 2.5 Hz
+Green Steady light Ready-State
+Fast flashing Generator in active state
+(Manual operation or heating program is running)
+Yellow Steady light Initialization after reset, waiting until network connection
+has been established for the first time and DC link is
+charged.
+Fast flashing Flashing for 10 seconds for system identification in the net-
+work.
+Red Steady light ICC is in error state.
+Slow flashing Network error (physical connection disconnected or bus
+master timeout).
+Fast flashing Shutdown by interlock is active.
+Red-Yellow Fast flashing Non-acknowledgable error in safety function.
+6.6 Switching on the device
+Connect the device to the power supply.
+Ensure that the mains voltage matches the specifications on the type plate.
+ÔÇó Switch on the cooling water supply for the induction system.
+ÔÇó Supply the generator with mains voltage (400V, 16A and 24V, max. 3.5A).
+ÔÇó The generator is switched on and off via the digital interface.
+ÔÇó The emergency stop must not be activated.
+ÔÇó The generator is ready for operation.
+6.7 Switching off the device
+The generator is switched on and off via the digital interface.
+- 23 -
+
+============================================================
+PAGE 29
+============================================================
+Chapter
+6
+INDUCTION HEATING SYSTEM
+6.8 Disassembly, packaging
+De-energize
+ÔÇó Turn off the generator (for instructions, see section ÔÇ£6.7ÔÇØ).
+ÔÇó Open the disconnect device in the external electrical installation.
+ÔÇó Remove all electrical connections.
+Empty the cooling water circuit
+Blow out the water circuit with compressed air against the normal flow direction. Remove the water
+connections on the power supply unit and completely empty the cooling water circuit. To do this,
+carefully blow out the cooling water circuit with compressed air to remove any water residues.
+Packaging
+Pack the generator according to its weight and size.
+Disposal
+Old devices that are no longer in use must be disposed of properly. The generator consists mainly
+of the following materials:
+ÔÇó Metals
+ÔÇó Aluminum
+ÔÇó Copper
+ÔÇó Brass
+ÔÇó Galvanized sheet steel
+ÔÇó Plastics
+ÔÇó Teflon
+ÔÇó PA and others
+- 24 -
+
+============================================================
+PAGE 30
+============================================================
+Chapter
+7
+INDUCTION HEATING SYSTEM
+7. Working with the device
+Voltages at the inductor!
+When the generator is switched on, the following voltages are present at the inductor:
+MF voltage between the two inductor terminals and MF voltage to ground.
+´â£ The user must install suitable covers and safety devices to protect against contact!
+Danger!
+7.1 Operating the device
+The device can be controlled via the Ethernet UDP serial interface.
+The Ethernet UDP interface is described in Chapter 9.1 ff.
+In addition/alternatively, a numerical control (PLC) with touch display can be ordered.
+The PLC control is described in Chapter 9.8.
+7.2 Error messages
+The error messages are described in Chapter 9.8.3 Error Page.
+7.3 Maintenance
+There are no parts in the device itself that require maintenance.
+Check the covers and the function of the safety devices regularly.
+Cleaning the water filter
+Depending on the quality of the cooling water, the filters in the recooling system may become dirty after
+prolonged operation. Therefore, all water filters must be cleaned regularly.
+General visual inspection
+A general visual inspection should be carried out regularly. Check the induction generator for moisture,
+corrosion, dirt accumulation on the induction coil, and signs of flashover. Check the inductor for mechani-
+cal wear.
+The connection jaws must be checked regularly for contamination and cleaned if necessary. The areas
+between and above and below the copper jaws are important; there must be no short-circuit contact here.
+- 25 -
+
+============================================================
+PAGE 31
+============================================================
+Chapter
+7
+INDUCTION HEATING SYSTEM
+Replacing the inductor
+It may be necessary to replace the inductor because the original inductor is defective or because a differ-
+ent workpiece geometry requires a new inductor. To do this, proceed in the order described below:
+De-energize
+ÔÇó Switch off the generator (for instructions, see section ÔÇ£6.8ÔÇØ).
+Drain the cooling water circuit
+Blow out the water circuit with compressed air against the normal flow direction. Remove the water
+connections on the power supply unit and drain the cooling water circuit completely. To do this, care-
+fully blow out the cooling water circuit with compressed air to remove any water residues.
+Detach the inductor from the inductor connection jaws
+ÔÇó Loosen the 4 screws on the inductor connection jaws. Remove the inductor.
+ÔÇó Ensure that the two O-rings remain in the grooves of the inductor connection jaws.
+2 x O-Ring
+4 x M5 Thread,
+For attaching
+the inductor
+Illustration 11: Inductor connection jaws without inductor
+Attaching the new inductor to the inductor connection jaws
+ÔÇó Ensure that both the connection jaws of the inductor and the generator are clean and free of
+corrosion.
+ÔÇó Ensure that the two O-rings are correctly positioned in the grooves of the inductor connection
+jaws of the generator.
+ÔÇó Attach the inductor to the inductor connection jaws using the 4 screws provided. Never use
+conventional steel screws for this purpose!
+ÔÇó Slowly open the cooling water supply and check the connection for leaks.
+ÔÇó Switch the generator back on and slowly increase the setpoint to check the current consump-
+tion.
+- 26 -
+
+============================================================
+PAGE 32
+============================================================
+Chapter
+8
+INDUCTION HEATING SYSTEM
+8. Technical specifications
+Parameters
+Mains connection 3/PE 400V, 50/60Hz
+Max. power consumption 5.6kVA
+Nominal power 5kW
+Max. inductor voltage 130Veff
+Recommended backup fuse Circuit breaker 3x400V, K 16A,
+Duty cycle 100%
+Cooling water flow rate 1 to 8 l/min (observe cooling water requirements!)
+Cooling water pressure 3.5-6 bar; max. 8 bar, differential pressure of min. 3.5 bar
+(min/max)
+Cooling water temperature 40┬░C
+(max)
+Operating frequency 20 to 100 kHz
+Dimensions 75 x 75 x 299 mm (330 mm incl. connections)
+Weight Approx. 4 kg
+Protection class IP 54 with additional cover
+Protection rating I
+In general:
+Operation1 Storage Transport
+Temperature +10 ┬░C - +45 ┬░C -20 ┬░C - +55 ┬░C -20 ┬░C - +70 ┬░C
+Relative humidity 10 % - 90 % 30 % - 95 % 95 %
+1) No condensation or frosting.
+- 27 -
+
+============================================================
+PAGE 33
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9. Appendix
+9.1 Quick overview of process data (UDP control)
+The telegrams with the PLC output data must be sent cyclically from the bus master to the ICC (port
+5010).
+9.1.1 PLC output data
+Byte# Description Data type Value
+1 Prefix ARRAY [1..8] OF BYTE B
+2 S
+3 T
+4 S
+5 T
+6 A
+7 R
+8 T
+9 Control word UNIT cf. 9.3.1
+10
+11 Current setpoint REAL cf. 9.3.2
+12
+13
+14
+15 Power setpoint REAL cf. 9.3.3
+16
+17
+18
+19 Heating program number UNIT cf. 9.3.4
+20
+21 Suffix ARRAY [1..8] OF BYTE B
+22 S
+23 T
+24 E
+25 N
+26 D
+27 T
+28 X
+Table 1: Byte-wise arrangement of the PLC output data (control data)
+- 28 -
+
+============================================================
+PAGE 34
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.1.2 SPS-Eingangsdaten
+Byte# Description Data type Value
+1 Prefix ARRAY[1..8] OF BYTE B
+2 S
+3 T
+4 S
+5 T
+6 A
+7 R
+8 T
+9 Status word UINT cf. 9.2.1
+10
+11 Process status word UINT cf. 9.2.2
+12
+13 Actual value Primary current REAL cf. 9.2.3
+14
+15
+16
+17 Actual value Phase angle REAL cf. 9.2.4
+18
+19
+20
+21 Actual value Operating frequency REAL cf. 9.2.5
+22
+23
+24
+25 Actual value Power REAL cf. 9.2.6
+26
+27
+28
+29 Actual value REAL cf. 9.2.7
+30 Capacitor voltage
+31
+32
+33 REAL cf. 9.2.8
+34 Actual value
+35 DC link voltage
+36
+37 REAL cf. 9.2.9
+38 Actual value Energy
+39
+40
+41 REAL cf. 9.2.10
+42 Actual value
+43
+44
+45 Cooling water volume flow REAL cf. 9.2.11
+46
+47
+48
+49 Actual value Temperature at se- UINT cf. 9.2.12
+50 lected sensor
+51 UINT cf. 9.2.13
+52
+53 Selected heating program UINT cf. 9.2.14
+54
+55 Heating program phase DWORD cf. 9.2.15
+56 Status State machine
+57
+58
+59 Status word DWORD cf. 9.2.16
+60 Error flags
+61
+62
+63 ARRAY [1..8] of DWORD cf. 9.2.17
+..
+..
+94
+- 29 -
+
+============================================================
+PAGE 35
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+95 Temperature of the individual ARRAY [1..8] of REAL cf. 9.2.18
+.. heating phases of the current
+.. heating program
+126
+127 Suffix ARRAY[1..8] OF BYTE B
+128 S
+129 T
+130 E
+131 N
+132 D
+133 T
+134 X
+Table 2: Byte-wise arrangement of PLC input data (status data)
+9.2 Process image PLC input data (ICC ÔåÆ PLC)
+The telegrams containing the PLC input data are sent cyclically by the ICC to the bus master (port
+5010) at intervals of 100 ms.
+9.2.1 Inverter status word ÔÇô status bit field
+The inverter status word contains information on the current operating mode and any errors that
+have occurred.
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+HEAT HEAT
+HEART
+--- --- --- --- --- --- ESTOP --- --- --- PROG PROG ERROR ACTIVE READY
+BEAT
+ERR DONE
+status bit ÔÇ×READYÔÇ£
+READY 0 Control system and converter are not ready.
+1 Control system and converter are ready.
+status bit ÔÇ×ACTIVEÔÇ£
+ACTIVE 0 The inverter is not in active mode.
+1 The inverter is in active mode.
+status bit ÔÇ×ERRORÔÇ£
+0 There is no fault.
+ERROR
+1 There is at least one fault. The inverter is disabled until the fault has been rectified
+and acknowledged.
+status bit ÔÇ×HEATING PROGRAM DONEÔÇ£
+HEAT
+PROG 0 Heating program is running or was not completed successfully
+DONE
+1 Heating program was completed successfully
+status bit ÔÇ×HEATING PROGRAM ERRORÔÇ£
+HEAT
+PROG 0 Heating program is running or has been successfully completed
+ERR
+1 Heating program terminated with error
+Bits 5ÔÇª7 Reserved
+status bit ÔÇ×ESTOPÔÇ£ÔÇô Emergency Stop / Hardware Interlock
+0 Umrichter befindet sich im regul├ñren Betriebszustand
+ESTOP
+1 Die Hardwarefreigabe (Interlock) ist nicht gesetzt.
+Der Umrichter ist in der Sicherheitsabschaltung.
+Bits 9ÔÇª14 Reserved
+HEART status bit ÔÇ×LifebitÔÇ£ ÔÇô Lebenszeichen├╝berwachung
+BEAT
+Toggle bit: The life bit from the control word is returned inverted.
+- 30 -
+
+============================================================
+PAGE 36
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.2.2 Controller status word ÔÇô process status bitfield
+The controller status word contains more detailed information about the operating mode.
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+--- --- --- --- --- --- --- --- --- --- --- --- CTRL_STATE
+Status display ÔÇ£CTRL_STATEÔÇØ ÔÇô Current controller status
+0 = Controller inactive / Power output switched off
+(0b0000)
+1 Current limitation
+(0b0001)
+2 Power limitation
+(0b0010)
+3 Voltage limitation (U_Cap)
+(0b0011)
+Bits 0...3
+4 Phase angle limitation ¤å
+(0b0100)
+5 Switching losses limitation PV = UDC Ôïà I Ôïà f Ôïà sin(¤å)
+(0b0101)
+6 Frequency limitation
+(0b0110)
+7ÔÇª15 Reserved.
+(0b0111
+Ôï«
+0b1111)
+Bit 4 Violation of minimum limit in heating program
+Bit 5 Violation of maximum limit in heating program
+Bits 6...15 Reserved
+- 31 -
+
+============================================================
+PAGE 37
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.2.3 Instantaneous value of primary current
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of primary current (32-bit floating point number)
+Instantaneous value Primary current of the converter in amperes.
+Primary current
+9.2.4 Instantaneous value phase shift primary current
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of welding voltage (32-bit floating point number)
+Instantaneous value Phase shift in degrees
+Phase shift
+9.2.5 Instantaneous value frequency
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value frequency (32-bit floating point number)
+Instantaneous value fre- Operating frequency in Hertz (switching frequency of the inverter, setpoint of the modulator)
+quency
+9.2.6 Instantaneous power value
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous power value (32-bit floating point number)
+Instantaneous power value Power output in watts, measured in the DC link
+9.2.7 Instantaneous value of capacitor voltage
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of capacitor voltage (32-bit floating point number)
+Instantaneous value of ca- Calculated capacitor voltage in volts
+pacitor voltage
+9.2.8 Instantaneous value of DC link voltage
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of DC link voltage (32-bit floating point number)
+Instantaneous value DC link voltage in volts
+DCL voltage
+- 32 -
+
+============================================================
+PAGE 38
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.2.9 Instantaneous value of energy meter
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of energy meter (32-bit floating point number)
+Instantaneous value Energy meter in watt seconds
+Energy
+9.2.10 Instantaneous value of cooling water flow rate
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of cooling water flow (32-bit floating point number)
+Instantaneous value of cool- Measured value of the volume flow in l/min
+ing water flow
+9.2.11 Instantaneous value of temperature sensor
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value of temperature sensor (32-bit floating point number)
+Instantaneous value of Measured value of the selected temperature sensor in ┬░C
+temperature sensor
+9.2.12 Instantaneous value of heating program phase
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+Instantaneous value of heating program phase (16-Bit Unsigned Integer)
+Instantaneous value of heat- Number of the active phase of the selected heating program, 0 if heating program is not active
+ing program phase
+9.2.13 Current value of heating program phase
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+Current value of the heating program phase currently being (16-Bit Unsigned Integer)
+Instantaneous value Number of the active phase of the selected heating program, 0 if heating program is not active
+Heating program phase
+- 33 -
+
+============================================================
+PAGE 39
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.2.14 Status state machine ÔÇô state
+This 16-bit number indicates the current status of the converter's primary control logic.
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+FSM Status (16-Bit Unsigned Integer)
+Status state machine
+0 Reserved: Required for internal use [NONE]
+1 Reserved: Required for internal use [_ANY]
+2 Init: The drive is in the start procedure; the internal components are being activated
+and prepared for operation.
+3 InitNetwork: Start and initialize the network interface until a physical connection is es-
+tablished and a valid IP address configuration has been set (either via DHCP or static
+address).
+4 StartNetServices: Start network services (fieldbus communication, service protocol,
+and others, if applicable).
+5 WaitForBusMaster: Wait until a communication connection with the higher-level con-
+troller has been established.
+FSM Status 6 PrepareOnBoardSupplies: Activate the internally generated supply voltages.
+7 PrepareGateDrivers: Initialize and check the gate drivers.
+8 WaitForDCLinkCharged: Wait until the DC link is charged before activating the pre-
+charge bypass.
+9 Ready: Ready state.
+10 Active: Active operating mode with enabled power output.
+11 Error: Error state. Can only be exited by acknowledging.
+12 NetworkError: A network error has occurred, loss of bus master communication
+(timeout), physical connection disconnected, or other network errors.
+13
+14 UnrecoverableError: A serious, non-acknowledgeable error has occurred. The system
+must be restarted.
+- 34 -
+
+============================================================
+PAGE 40
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.2.15 Status word error
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value Error status word (32-Bit Unsigned Integer)
+The possible system errors are mapped to the bits:
+Bit Triggering error
+0 Error in PWM measurement evaluation (phase detection, galvanically isolated meas-
+ured values)
+1 Error in pulse width modulator
+2 Gate driver error
+3 Overcurrent primary current
+4 Overcurrent DC link
+5 Overvoltage DC link
+6 Undervoltage DC link
+7 Capacitive switching: tolerance limit exceeded
+8 Overtemperature: Transformer temperature above limit value
+9 Overtemperature: Heat sink temperature above set limit value
+10 Overtemperature: Pyrometer temperature above set limit value
+11 Overtemperature: Thermocouple temperature above set limit value
+12 Coolant flow monitor: Minimum volume flow below limit value
+13 Reserved.
+14 Sensor cable interrupted or sensor not plugged in
+Instantaneous value 15 Sensor data implausible
+Error status word
+16 Supply voltage: External 24 volt voltage limit values violated
+17 Supply voltage: Internal 15 V voltage limit values violated
+18 Supply voltage: Internal 5 V voltage limit values violated
+19 Supply voltage: Internal 3.3 V voltage (digital) limit values violated
+20 Supply voltage: Internal 3.0 V voltage (analog) limit values violated
+21 Supply voltage: Internal isolated power supply limit values violated
+22 Supply voltage: Gate driver power supply limit values violated
+23 Reserved.
+24 Reserved.
+25 Safety function: Locking of safety-critical functions could not be verified
+26 Safety function: Power enabled blocked because interlock was triggered
+27 Communication error (life bit faulty)
+28 Communication error (bus master timeout)
+29 Memory error: Stack overflow
+30 Program error / Processed data invalid
+31 Undefined error in program or communication
+- 35 -
+
+============================================================
+PAGE 41
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.2.16 Status word error current heating program
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Instantaneous value Error status word (32-Bit Unsigned Integer)
+Die m├Âglichen Systemfehler werden auf die Bits abgebildet:
+Bit Triggering error
+0 Reserved
+1 Invalid temperature sensor during a heating phase
+2 No temperature sensor during a heating phase
+3-7 Reserved
+8 Temperature above limit value
+Instantaneous value Error
+9 Minimum temperature value not reached
+status word
+10 Energy above limit value
+11 Minimum energy value not reached
+12-15 Reserved
+16-23 Heating phase that triggered the error
+24-31 Current heating program that triggered the error
+9.2.17 Energy meter for heating phases for current heating program
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+255 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 32 31 2 1 0
+Bit 255 Bit 223 Bit 191 Bit 159 Bit 127 Bit 95 Bit 63 Bit 31
+ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª
+Bit 224 Bit 192 Bit 160 Bit 128 Bit 96 Bit 64 Bit 32 Bit 0
+energy meter energy meter energy meter energy meter energy meter energy meter energy meter energy meter
+Phase 8 Phase 7 Phase 6 Phase 5 Phase 4 Phase 3 Phase 2 Phase 1
+(32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT)
+energy meter Energy meter in watt seconds
+9.2.18 Temperature value of the heating phases for the current heating program
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+255 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 32 31 2 1 0
+Bit 255 Bit 223 Bit 191 Bit 159 Bit 127 Bit 95 Bit 63 Bit 31
+ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª ÔÇª
+Bit 224 Bit 192 Bit 160 Bit 128 Bit 96 Bit 64 Bit 32 Bit 0
+final temperature final temperature final temperature final temperature final temperature final temperature final temperature final temperature
+Phase 8 Phase 7 Phase 6 Phase 5 Phase 4 Phase 3 Phase 2 Phase 1
+(32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit UINT) (32-Bit REAL
+final temperature Measured value of the selected temperature sensor in ┬░C
+- 36 -
+
+============================================================
+PAGE 42
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.3 Process image PLC output data (PLC ÔåÆ ICC)
+9.3.1 Control word converter ÔÇô control bitfield
+The converter control word supplies the converter with all control signals required for operation.
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+HEART ACK RESET SEL CTRL HEIZEN
+--- --- --- --- --- --- --- --- ---
+BEAT ERROR ENRGY TEMP MODE EIN
+Control bit ÔÇ£HEATING ONÔÇØ ÔÇô Enable control in manual mode
+HEATING
+0 Switch off the inverter
+ON
+1 Switch on the inverter with the selected controller mode
+Control bit ÔÇ£CONTROL MODEÔÇØ ÔÇô Switching operating mode
+CTRL
+0 Manual operation (setpoint specification via PLC)
+MODE
+1 Automatic operation (heating programs)
+Control bits ÔÇ£SEL TEMP SOURCEÔÇØ ÔÇô Switch between thermocouple or pyrometer
+00 No temperature sensor selected. Temperature monitoring is not taking place.
+01 Monitoring of the thermocouple input.
+SEL
+The thermocouple value is used for evaluation for heating programs.
+TEMP
+10 Monitoring of the pyrometer input.
+The pyrometer value is used for evaluation for heating programs.
+11 Reserved
+Bits 4..6 Reserved
+Control bit ÔÇ£Reset EnergyÔÇØ ÔÇô Reset energy meter
+RESET
+0 Energy meter is enabled and integrates the power output over time
+ENRGY
+1 The energy meter remains reset to 0 as long as the bit is set
+Control bit ÔÇ£Acknowledge ErrorÔÇØ ÔÇô Acknowledge error
+ACK 0 No action.
+ERR
+0 ÔåÆ 1 When the edge is positive, a pending error is acknowledged and the inverter exits
+the error state.
+Bits 9..14 Reserved
+Bit 15 Heart Beat ÔÇô Life sign monitoring. The bit state must change every second.
+- 37 -
+
+============================================================
+PAGE 43
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.3.2 Target current setting ÔÇô target current (input)
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Current setpoint (32-bit floating point number)
+Setpoint specification in percent, relative to SYS_I_MAX.
+Setpoint
+Replacement control with the power setpoint, i.e., current control only below the set power specifi-
+Current
+cation (target power)
+9.3.3 Power setpoint specification ÔÇô target power (input)
+Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit Bit
+31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+Target value power (32-bit floating point number)
+Setpoint specification in percent, relative to SYS_P_MAX.
+Target value power Replacement control with the current setpoint, i.e., power control only below the set current set-
+point.
+9.3.4 Setpoint specification for heating program
+Bit 15 Bit 14 Bit 13 Bit 12 Bit 11 Bit 10 Bit 9 Bit 8 Bit 7 Bit 6 Bit 5 Bit 4 Bit 3 Bit 2 Bit 1 Bit 0
+Heating program setpoint (16-bit Unsigned Integer)
+Setpoint Heating program Setpoint specification Heating program number [1...100]
+no.
+- 38 -
+
+============================================================
+PAGE 44
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.4 Service communication
+The ICC controller implements a dedicated service task that opens a UDP socket on port 4660.
+Service telegrams for the bidirectional exchange of parameters, diagnostic data, and heating pro-
+grams are exchanged on this port.
+In addition, the ICC sends and receives UDP datagrams on port 4661, which contain text output with
+information on program execution, status and error messages. This console output can be used for
+troubleshooting, among other things. A console session must be initiated with the ÔÇ£HELLOÔÇØ command
+before the output is displayed.
+The ICC sends the response telegrams for service telegrams and console output back to the port
+from which the datagrams were sent.
+9.5 Heating programs
+The ICC control can use and store 100 heating programs. A heating program is described by eight
+heating phases. The higher-level PLC transmits a heating program in a single telegram containing
+all 8 heating phases.
+The heating programs are transmitted by the telegrams described below.
+9.5.1 ransferring a heating program
+Bytes Data type Designation Description
+0
+String with ÔÇ£SET_HEATPROGÔÇØ
+Ôï« CHAR[12] Preamble
+(No null termination)
+11
+12 Program number N of the program to be written.
+UINT16 HeatProgNumber N
+13 The first program has N = 1
+14
+Ôï« HEAT_PHASE_T HeatProgPhase N.1 Data structure of a heating program, see section 9.6
+53
+54
+Ôï« HEAT_PHASE_T HeatProgPhase N.2
+93
+94
+Ôï« HEAT_PHASE_T HeatProgPhase N.3
+133
+134
+Ôï« HEAT_PHASE_T HeatProgPhase N.4
+173
+174
+Ôï« HEAT_PHASE_T HeatProgPhase N.5
+213
+214
+Ôï« HEAT_PHASE_T HeatProgPhase N.6
+253
+254
+Ôï« HEAT_PHASE_T HeatProgPhase N.7
+293
+294
+Ôï« HEAT_PHASE_T HeatProgPhase N.8
+333
+334
+String with ÔÇ£END_HEATPROGÔÇØ
+Ôï« CHAR[12] Suffix
+(No null termination))
+346
+- 39 -
+
+============================================================
+PAGE 45
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.5.2 Reading a heating program
+To read out a heating program, the following telegram must be sent to the ICC
+Bytes Datentyp Bezeichnung Beschreibung
+1
+String with ÔÇ£GET_HEATPROGÔÇØ
+Ôï« CHAR[12] Preamble
+(no null termination)
+12
+13
+UINT16 HeatProgNumber N Program number N of the program to be read
+14
+15
+String with ÔÇ£END_HEATPROGÔÇØ
+Ôï« CHAR[12] Suffix
+(no null termination)
+26
+The converter's response telegram has the same structure as described in section 9.5.1, but the
+prefix then contains ÔÇ£GET_HEATPROGÔÇ£.
+- 40 -
+
+============================================================
+PAGE 46
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.6 Establishing a heating phase
+A heating phase is 40 bytes in size and has the following data structure:
+Bytes Data type Designation Description
+1 Bool (ÔëÖ UINT8) Mode Operating mode
+0 = Energy control mode
+1 = Temperature control mode
+2 UINT8 Forwarding 0 = No switching, waiting for time to elapse
+1 = Switching when energy or temperature is reached
+3 UINT8 Control mode 0 = Control based on current
+1 = Control based on power
+4 Bool (ÔëÖ UINT8) Status 0 = Heating phase active
+1 = Heating phase inactive
+5 UINT32 Current Current setpoint, in per mille relative to
+FULL_SCALE_CURRENT
+6
+7
+8
+9 UINT32 Power Power setpoint, in per mille relative to
+FULL_SCALE_POWER
+10
+11
+12
+13 UINT32 Time Maximum duration of the heating phase
+Unit: milliseconds [ms]
+14
+15
+16
+17 UINT32 Energy setpoint Setpoint for energy to be supplied in this heating phase
+Unit: watt seconds [Ws]
+18
+19
+20
+21 UINT32 Energy min Minimum energy to be supplied in this heating phase (lower
+limit tolerance band test)
+22
+Unit: watt seconds [Ws]
+23
+24
+25 UINT32 Energy max Maximum energy to be supplied in this heating phase (upper
+limit tolerance band test)
+26
+Unit: watt seconds [Ws]
+27
+28
+29 UINT32 Temperature setpoint Target temperature to be reached in this heating phase
+Unit: degrees Celsius [┬░C]
+30
+31
+32
+33 UINT32 Temperature min Minimum temperature to be reached in this heating phase
+(lower limit tolerance band test)
+34
+Unit: degrees Celsius [┬░C]
+35
+36
+37 UINT32 Temperature max Maximum temperature to be reached in this heating phase (up-
+per limit tolerance band test)
+38
+Unit: degrees Celsius [┬░C]
+39
+40
+- 41 -
+
+============================================================
+PAGE 47
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.7 Monitoring functions
+If the fieldbus fails, the system is switched off and all active operating states are switched to standby
+mode. Monitoring is performed by two mechanisms:
+ÔÇó Lifebit monitoring (fast, timeout 1 s)
+ÔÇó Telegram monitoring (slow, timeout 10 s)
+Both errors put the system into a safe state and must be acknowledged.
+The error acknowledgment must then be performed via the field bus, which is running again; at least
+two successfully processed telegrams are required to detect the signal edges in the control bits.
+9.7.1 Missing master life bit
+If no change in the life bit of the higher-level controller is detected for longer than 1000 milliseconds,
+the system switches off and enters the error state.
+9.7.2 Timeout due to absence of master telegrams
+If no valid telegram from the fieldbus master is detected for longer than 10 seconds, the system
+switches off and enters the error state.
+- 42 -
+
+============================================================
+PAGE 48
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.8 PLC control
+After starting the control system, it first attempts to establish a connection to the generator. Once the
+connection is established, the main menu opens. If the connection cannot be established, the ÔÇ£Con-
+figurationÔÇØ settings page opens automatically.
+Illustration 12: Loading screen for PLC control
+- 43 -
+
+============================================================
+PAGE 49
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.8.1 Settings
+Illustration 13: ÔÇ£ConfigurationÔÇØ PLC control
+The following changes can be made on the settings page:
+Field Description
+HMI-IP The IP address of the control system is set here
+Netmask Address set
+Gateway Address set
+Flexispot IP The IP address of the ICC generator is set here
+Start Frequency [Hz] The start frequency of the ICC generator is set here
+Confirm that incorrect values can destroy the generator!
+The values can be changed in the following window
+min. Water Flow [l/min] The minimum cooling water flow is set here
+Confirm that incorrect values can destroy the generator!
+The values can be changed in the following window
+Control Mode Here you can select whether the generator is controlled manually, via
+the setpoint values, or via the heating programs
+Interface Mode Here you can select whether the input is made via the local HMI or
+via an external control
+- 44 -
+
+============================================================
+PAGE 50
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.8.2 Description of the start screen
+Illustration 14: Home screen PLC control
+Field Description
+Lifebit The LED indicates communication between the generator and the control unit.
+If this LED is not flashing, there is no communication between the devices.
+Ready The LED indicates the operating status of the generator.
+Green: Generator is ready for operation.
+Red: An error has occurred.
+Energy Counter The maximum energy meter is started here. This causes the generator to
+switch off automatically after a certain value has been reached.
+This is only possible via a heating program.
+Actual Values Shows the current parameters of the generator
+(power, current, phase angle, energy conversion, frequency, and water flow).
+P [W]; I [A] Shows the current value for power and current in relation to the maximum val-
+ues.
+Circular dia- Shows the current power as a percentage.
+gram for perfor-
+mance
+Phase Angle Shows the current phase angle.
+Phi
+Act. DC Voltage Shows the current DC link voltage.
+[V]
+Setpoints Input of the setpoints for power and current.
+(to change)
+Setpoints Shows the current start frequency in Hz and the minimum water flow in l/min.
+(info only)
+- 45 -
+
+============================================================
+PAGE 51
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+Field Description
+ON Button / The generator is switched on using the ÔÇ£ONÔÇØ button. After switching on, the
+OFF Button ÔÇ£OFFÔÇØ button appears so that the generator can be switched off again.
+>ACK< This button appears when there is an error. Once the error has been rectified,
+it can be acknowledged by pressing and holding the button. The button then
+disappears again.
+Show Error This button is used to call up the current error list.
+page It also shows which error bit is being addressed.
+The limit is displayed below.
+Heat Prog shows which heating program is currently running.
+Phase shows which step the program is currently in.
+Heat Progs This menu item takes you to the heating programs.
+Settings This menu item takes you to the generator settings.
+- 46 -
+
+============================================================
+PAGE 52
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.8.3 Error Page PLC Control
+This page displays all errors encountered by the generator.
+Illustration 15: Error-Page SPS-Steuerung
+Field Description
+Green No error on the generator.
+Red The displayed error is active.
+Reset Errors can be reset in the main menu [>ACK<].
+Main Page This button takes you to the main menu
+Error Solution
+Error in the PWM Take the generator out of service and send it to COBES.
+measurement
+evaluation
+Error in pulse width Take the generator out of service and send it to COBES.
+modulator
+Gate driver Take the generator out of service and send it to COBES.
+Primary over Adjustment incorrect, inform COBES.
+current
+DC link over Adjustment incorrect, inform COBES.
+current
+DC link over Check power supply, inform COBES.
+voltage
+Capacitive Adjustment incorrect, inform COBES.
+switching out of
+range
+- 47 -
+
+============================================================
+PAGE 53
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+Error Solution
+Over temp. Take the generator out of service and send it to COBES.
+transformer
+Over temp. heat Take the generator out of service and send it to COBES.
+sink
+Over temp. by Adjust the timer program.
+pyrometer
+Over temp. by Adjust the timer program.
+thermocouple
+min. cool water flow Check the cooling water flow.
+(res) -
+Sensor cable Check the sensor.
+broken or sensor
+not plugged
+No valide sensor Check the sensor.
+data
+Error Solution
+External 24 Volt Check external 24-volt power supply.
+voltage limits
+violated
+Internal 15 V volt- Take generator out of service and send it to COBES.
+age limits violated
+Internal 5 V voltage Take generator out of service and send it to COBES.
+limits violated
+Internal 3.3 V volt- Take generator out of service and send it to COBES.
+age (digital) limit
+values violated
+Internal 3.0 V volt- Take generator out of service and send it to COBES.
+age supply limits
+injured
+Gate driver voltage Take generator out of service and send it to COBES.
+supply limit values
+violated
+(res) -
+- 48 -
+
+============================================================
+PAGE 54
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+Error Solution
+(res)
+Locking of safety- Take the generator out of service and send it to COBES.
+critical functions
+could not be
+verified
+Power release Check the interlock circuit.
+blocked because
+Interlock was
+triggered
+Communication Check the network cable and IP address.
+error (heartbeat
+faulty)
+Communication Check the network cable and IP address.
+error (Bus Master
+Timeout)
+Memory error: Take the generator out of service and send it to COBES.
+stack overflow
+Program error / Check the generator control system.
+processed data
+invalid
+Undefined error in Take the generator out of service and send it to COBES.
+the program or
+communication
+- 49 -
+
+============================================================
+PAGE 55
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.8.4 Heating programs
+In the ÔÇ£Heating Program,ÔÇØ 100 heating programs can be created, each with 8 phases.
+Illustration 16: Heating program PLC control
+Field Description
+STATE Here you can specify whether the program is active or inactive.
+MODE Here you can choose between energy or time.
+NEXT Here you can choose whether the next step starts after a certain time or af-
+ter a set point is reached.
+CTRL Here you can select whether to set up current or power control.
+Current Here you can set the parameter for the current.
+Power Here you can set the parameter for the power.
+Time Here you can set the parameter for the time.
+Energy Setpoint Here you can enter the energy setpoints.
+Temperature Here you can enter the temperature setpoints.
+Setpoint
+Prog.Number You can create 100 heating programs, each with 8 phases.
+read Use this button to transfer the generator's heating programs to the control
+system.
+Phase 1-4 Use this button to change the phases of the program.
+Phase 1-4 or Phase 5-8
+write Use this button to transfer the written heating program to the generator.
+Main Page Use this button to return to the main menu.
+- 50 -
+
+============================================================
+PAGE 56
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.9 Circuit diagrams, technical drawings
+Illustration 17: Overview of basic unit
+- 51 -
+
+============================================================
+PAGE 57
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+Illustration 18: wiring diagram ICC
+- 52 -
+
+============================================================
+PAGE 58
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.10 Cooling water requirements
+Validity
+This specification is valid for a closed system with the cooling water conductivity range specified
+below. Please refer to the technical data for the generator for the minimum required flow rate. The
+following applies in general:
+ÔÇó Conductivity range 50 - 600 ╬╝S/cm
+ÔÇó Differential pressure approx. 3.5 bar (depending on inductor), maximum inlet pressure 8 bar
+ÔÇó Free of suspended substances
+ÔÇó Total hardness max. 8 ┬░dH
+ÔÇó pH > 7
+Definition of a closed system
+A cooling circuit is referred to as a ÔÇ£closed systemÔÇØ if the cooling water circulates in a closed circuit
+and therefore does not come into contact with the surrounding atmosphere or with foreign water from
+other cooling circuits. This means that it is not possible for the water parameters to be altered by the
+atmosphere or by foreign water.
+Requirements for a functioning cooling circuit
+ÔÇó Dirt traps with a fine mesh of 0.25 mm must be installed in the cooling water supply.
+ÔÇó Do not use transparent hose connections for open installation, as light exposure promotes
+algae growth.
+ÔÇó TIP: Use opaque covers to protect transparent hoses from light exposure.
+ÔÇó The closed system must not be connected to external cooling circuits.
+ÔÇó The following materials must not come into contact with the system water:
+- Aluminum
+- Carbon steel
+- Galvanized and hot-dip galvanized steel.
+Water parameters
+TOTAL HARDNESS MAX. PH VALUE
+8 ┬░dH 7,8
+6 ┬░dH 8,1
+4 ┬░dH 8,3
+DESIGNATION LIMIT VALUE
+Aggressive carbon dioxide (CO2) Must not be detectable
+Ammonia (NH3) Must not be detectable
+Nitrite < 1 mg/l
+Iron < 0.3 mg/l
+Manganese < 0.05 mg/l
+Sulfate < 250 mg/l
+Chloride < 250 mg/l
+COD (chemical oxygen demand) < 40 mg/l
+Microbiological growth: colony count (sulfate < 1000/ml (must not be detectable)
+reducers)
+- 53 -
+
+============================================================
+PAGE 59
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+Coolant additives
+DESCRIPTION RECOMMENDATION COBES Article
+Multi-metal inhibitor, particularly low in salt 910 0002 / 910 0003
+Corrosion
+for current-carrying induction circuits Corrosion inhibitor KKL IK
+inhibitor
+(container sizes: 100 ml/250 ml)
+Broad-spectrum biocide, free from formal- 910 0006 / 910 0007, Aquacid Algae-
+Biocides
+dehyde-releasing agents Free (container sizes: 100 ml/250 ml)
+Antifreeze with low conductivity, suitable 910 0004, Cold weather additive
+Coolant for use down to -40┬░C depending on dos- Frost protection
+age (container sizes: 2000 ml)
+Cleaning and maintenance
+The devices, as well as any external cooling systems provided, must be filled with cooling water that
+meets the above-mentioned water parameters before being used for the first time. We recommend
+adding the appropriate additives to ensure the long-term functionality of the cooling system.
+Only the cooling water additives described here may be used.
+These products can be obtained from COBES.
+The cooling water should be checked approximately every 6 months.
+The test parameters could be:
+ÔÇó Appearance: clear, without suspended solids.
+ÔÇó No odor at most a slight smell of copper inhibitor.
+ÔÇó pH value.
+ÔÇó Conductivity.
+ÔÇó Colony count.
+ÔÇó If any abnormalities are found, have a cooling water sample analyzed.
+The cooling circuit must be cleaned and the water replaced once a year.
+ÔÇó If the limit values of the test parameters are already exceeded during the inspection cycle,
+the cooling circuit must be cleaned and the water replaced.
+The local or national wastewater regulations at the generator installation site must be observed when
+disposing of the cooling water.
+- 54 -
+
+============================================================
+PAGE 60
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.11 Dew point diagram
+An air pressure of 1013 mbar was used as the basis for creating the diagram.
+To prevent condensation, the cooling water temperature must be above the dew point temperature
+(see diagram) of the room air.
+Illustration 17: Dew point diagram
+- 55 -
+
+============================================================
+PAGE 61
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+9.12 Drawings
+Illustration 18: Drawing generator
+- 56 -
+
+============================================================
+PAGE 62
+============================================================
+Chapter
+9
+INDUCTION HEATING SYSTEM
+Illustration 19: Terminal block, capacitor, complete, ICC
+- 57 -
+

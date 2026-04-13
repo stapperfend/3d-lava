@@ -1,0 +1,536 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Process Control — 3D Print Suite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+
+<body>
+
+  <!-- ══════════════════════ TOP BAR ══════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <svg class="topbar-logo" viewBox="0 0 32 32" fill="none">
+        <polygon points="16,2 30,26 2,26" fill="none" stroke="#7c6af7" stroke-width="2.5" />
+        <line x1="16" y1="10" x2="16" y2="20" stroke="#7c6af7" stroke-width="2" />
+        <circle cx="16" cy="23" r="1.5" fill="#7c6af7" />
+      </svg>
+      <span class="topbar-title">Process Control</span>
+      {% if mock_mode %}<span class="badge badge-mock">MOCK MODE</span>{% endif %}
+    </div>
+    <div class="topbar-right">
+      <div class="tl-widget" id="tl-widget">
+        <div class="tl-light tl-green" id="tl-green"></div>
+        <div class="tl-light tl-yellow" id="tl-yellow"></div>
+        <div class="tl-light tl-red" id="tl-red"></div>
+        <span class="tl-label" id="tl-label">STANDBY</span>
+      </div>
+      <span class="status-dot" id="conn-dot"></span>
+      <span class="status-label" id="conn-label">Connecting…</span>
+      <span class="topbar-time" id="clock"></span>
+    </div>
+  </header>
+
+  <!-- ══════════════════════ MAIN GRID ════════════════════ -->
+  <!-- 3 columns × 2 rows -->
+  <main class="grid">
+
+    <!-- ─── COL 1 TOP: NI cRIO ─── -->
+    <section class="card" id="crio-panel">
+      <div class="card-header">
+        <span class="card-icon">⚡</span>
+        <h2>NI cRIO</h2>
+        <span class="card-subtitle mono">{{ crio_ip }}</span>
+        <span class="conn-badge" id="crio-status-badge">–</span>
+      </div>
+      <div class="card-body">
+        <div class="section-label">Relay Channels</div>
+        <div class="relay-grid">
+          {% for name, ch_id in relay_channels.items() %}
+          {% set is_traffic = ch_id in traffic_relays.values() %}
+          <div class="relay-item {% if is_traffic %}relay-passive{% endif %}" id="relay-{{ ch_id }}">
+            {% if is_traffic %}
+            <span class="relay-indicator" id="ind-{{ ch_id }}">◉</span>
+            {% else %}
+            <label class="toggle-switch">
+              <input type="checkbox" class="relay-cb" data-channel="{{ ch_id }}"
+                onchange="toggleRelay('{{ ch_id }}', this.checked)" />
+              <span class="toggle-slider"></span>
+            </label>
+            {% endif %}
+            <span class="relay-label">{{ name }}</span>
+            {% if ch_id == traffic_relays.vacuum_relay %}
+            <span class="role-badge">Vac</span>
+            {% elif ch_id == traffic_relays.furnace_relay %}
+            <span class="role-badge">Furn</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="section-label" style="margin-top:10px">Temperature Channels</div>
+        <div class="temp-grid">
+          {% for name, ch_id in temp_channels.items() %}
+          <div class="temp-card">
+            <div class="temp-value mono" id="tempval-{{ ch_id }}">—</div>
+            <div class="temp-unit">°C</div>
+            <div class="temp-name">{{ name }}</div>
+            <div class="temp-bar">
+              <div class="temp-bar-fill" id="tempbar-{{ ch_id }}"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── COL 2 TOP: Duet 3 6HC ─── -->
+    <section class="card" id="duet-panel">
+      <div class="card-header">
+        <span class="card-icon">🖨</span>
+        <h2>Duet 3 6HC</h2>
+        <span class="card-subtitle mono">{{ duet_ip }}</span>
+        <span class="conn-badge" id="duet-status-badge">–</span>
+      </div>
+      <div class="card-body">
+        <!-- State + position row -->
+        <div class="duet-state-row">
+          <div class="wf-state-wrap">
+            <span class="tiny-label">State</span>
+            <span class="wf-state-badge" id="wf-state-badge">IDLE</span>
+            <span class="wf-loops mono" id="wf-loops"></span>
+          </div>
+          <div class="duet-pos-row">
+            <span class="tiny-label">X</span><span class="pos-val mono" id="duet-x">—</span>
+            <span class="tiny-label">Y</span><span class="pos-val mono" id="duet-y">—</span>
+            <span class="tiny-label">Z</span><span class="pos-val mono" id="duet-z">—</span>
+          </div>
+          <div id="duet-heaters" class="heater-row"></div>
+        </div>
+
+        <!-- GCode editors (compact — single-textarea, tabbed) -->
+        <div class="gcode-editors">
+          <div class="gcode-editor-block">
+            <div class="gcode-editor-header">
+              <span>🏠 Homing GCode</span>
+              <button class="btn btn-xs" onclick="saveGcode('home')">Save</button>
+              <button class="btn btn-xs" onclick="renderViz()">↻ Viz</button>
+            </div>
+            <textarea id="gcode-home-editor" class="gcode-ta" spellcheck="false" placeholder="; Homing sequence…"
+              oninput="renderViz()"></textarea>
+          </div>
+          <div class="gcode-editor-block">
+            <div class="gcode-editor-header">
+              <span>🔄 Process GCode <small>(loop)</small></span>
+              <button class="btn btn-xs" onclick="saveGcode('process')">Save</button>
+              <button class="btn btn-xs" onclick="renderViz()">↻ Viz</button>
+            </div>
+            <textarea id="gcode-process-editor" class="gcode-ta" spellcheck="false" placeholder="; Repeating process…"
+              oninput="renderViz()"></textarea>
+          </div>
+        </div>
+
+        <!-- Workflow buttons -->
+        <div class="workflow-btns">
+          <button class="btn btn-wf" id="wf-home-btn" onclick="wfHome()">🏠 Home</button>
+          <button class="btn btn-wf" id="wf-start-btn" onclick="wfStart()" disabled>▶ Start</button>
+          <button class="btn btn-wf" id="wf-pause-btn" onclick="wfPause()" disabled>⏸ Pause</button>
+          <button class="btn btn-wf" id="wf-stop-btn" onclick="wfStop()" disabled>⏹ Stop</button>
+        </div>
+
+        <!-- Jog Controls -->
+        <div class="jog-section">
+          <div class="jog-settings">
+            <span class="tiny-label">Step (mm)</span>
+            <div class="jog-step-btns">
+              <button class="btn btn-xs jog-step-opt active" data-step="1" onclick="setJogStep(1)">1</button>
+              <button class="btn btn-xs jog-step-opt" data-step="5" onclick="setJogStep(5)">5</button>
+              <button class="btn btn-xs jog-step-opt" data-step="10" onclick="setJogStep(10)">10</button>
+              <button class="btn btn-xs jog-step-opt" data-step="50" onclick="setJogStep(50)">50</button>
+            </div>
+            <span class="tiny-label" style="margin-left:8px">Feed</span>
+            <input type="number" id="jog-feed" class="chart-tw-input" value="3000" min="100" max="10000"
+              style="width:54px" title="Feedrate mm/min" />
+            <span class="tiny-label">mm/min</span>
+          </div>
+          <div class="jog-pad">
+            <div></div>
+            <button class="btn jog-btn" onclick="jog('Y', 1)" title="+Y">▲</button>
+            <div></div>
+            <button class="btn jog-btn" onclick="jog('X', -1)" title="-X">◀</button>
+            <button class="btn jog-btn jog-center" onclick="jogHome()" title="Go to center">⌂</button>
+            <button class="btn jog-btn" onclick="jog('X', 1)" title="+X">▶</button>
+            <div></div>
+            <button class="btn jog-btn" onclick="jog('Y', -1)" title="-Y">▼</button>
+            <div></div>
+          </div>
+        </div>
+
+        <!-- Terminal -->
+        <div class="gcode-log" id="gcode-log"></div>
+        <div class="gcode-input-row">
+          <input type="text" id="gcode-input" class="gcode-input" placeholder="G28, M115, G1 X10…"
+            onkeydown="if(event.key==='Enter')sendGcode()" />
+          <button class="btn btn-primary" onclick="sendGcode()">Send</button>
+          <button class="btn btn-xs" onclick="gcodeQuick('G28')">Home</button>
+          <button class="btn btn-xs" onclick="gcodeQuick('M115')">Info</button>
+          <button class="btn btn-xs danger" onclick="gcodeQuick('M0')">E-Stop</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── COL 3 TOP: GCode Visualizer ─── -->
+    <section class="card" id="viz-panel">
+      <div class="card-header">
+        <span class="card-icon">🗺</span>
+        <h2>GCode Visualizer</h2>
+        <div class="viz-toolbar">
+          <label class="chart-tw-opt">
+            <input type="radio" name="viz-mode" value="home" checked onchange="setVizMode('home')" /> Homing
+          </label>
+          <label class="chart-tw-opt">
+            <input type="radio" name="viz-mode" value="both" onchange="setVizMode('both')" /> + Process
+          </label>
+        </div>
+        <span class="viz-pos-display mono" id="viz-pos">X— Y—</span>
+      </div>
+      <div class="viz-card-body">
+        <svg id="gcode-viz" class="viz-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+          <!-- Bed (380×380mm) — rendered in JS on init -->
+          <rect id="viz-bed" class="viz-bed" x="10" y="10" width="380" height="380" />
+          <!-- Travel limits (270×270mm centered at 55,55 in svg coords) -->
+          <rect id="viz-travel" class="viz-travel" x="10" y="10" width="270" height="270" />
+          <!-- Center crosshair -->
+          <g id="viz-crosshair">
+            <line class="viz-cross" x1="143" y1="0" x2="143" y2="400" />
+            <line class="viz-cross" x1="0" y1="143" x2="400" y2="143" />
+          </g>
+          <!-- Paths rendered by JS -->
+          <g id="viz-home-path"></g>
+          <g id="viz-process-path"></g>
+          <!-- Live position -->
+          <circle id="viz-live-dot" class="viz-live-dot" cx="-50" cy="-50" r="5" />
+          <!-- Trail -->
+          <polyline id="viz-trail" class="viz-trail" points="" />
+        </svg>
+      </div>
+    </section>
+
+    <!-- ─── COL 1 BOTTOM: Induction Furnace ─── -->
+    <section class="card" id="furnace-panel">
+      <div class="card-header">
+        <span class="card-icon">🔥</span>
+        <h2>Induction Furnace</h2>
+        <span class="card-subtitle mono">{{ furnace_ip }}</span>
+        <span class="conn-badge" id="furnace-status-badge">–</span>
+        <button class="btn btn-xs" style="margin-left:auto" onclick="openProgModal()" title="Edit heating programs">📋
+          Programs</button>
+        <button class="btn btn-xs" onclick="openErrModal()" title="Error decoder" id="err-modal-btn">⚠ Errors</button>
+        <button class="btn btn-xs" onclick="openProtoModal()" title="Protocol Inspector — raw byte/bit view"
+          id="proto-modal-btn">🔬 Inspector</button>
+      </div>
+      <div class="card-body furnace-body">
+        <!-- Row 1: Gauge + Live Data -->
+        <div class="furnace-top">
+          <div class="furnace-gauge-col">
+            <svg class="furnace-gauge" viewBox="0 0 160 110">
+              <path d="M16,96 A72,72 0 0,1 144,96" fill="none" stroke="#1a1e2e" stroke-width="14"
+                stroke-linecap="round" />
+              <path id="gauge-arc" d="M16,96 A72,72 0 0,1 144,96" fill="none" stroke="#f97316" stroke-width="14"
+                stroke-linecap="round" stroke-dasharray="226" stroke-dashoffset="226" />
+            </svg>
+            <div class="gauge-center">
+              <div class="furnace-actual-val mono" id="furnace-actual">—</div>
+              <div class="furnace-actual-unit">°C &nbsp; <span id="gauge-pct" class="gauge-pct">0%</span></div>
+            </div>
+            <div class="furnace-sp-disp">SP: <span id="furnace-sp-display">0</span> °C</div>
+            <div class="furnace-fsm" id="furnace-fsm">—</div>
+          </div>
+          <div class="live-grid">
+            <div class="lg-item">
+              <div class="lg-lbl">Power</div>
+              <div class="lg-val mono" id="ld-power">— W</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">Current</div>
+              <div class="lg-val mono" id="ld-current">— A</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">Frequency</div>
+              <div class="lg-val mono" id="ld-freq">— Hz</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">Water flow</div>
+              <div class="lg-val mono" id="ld-water">— l/m</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">Energy</div>
+              <div class="lg-val mono" id="ld-energy">— Ws</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">DC voltage</div>
+              <div class="lg-val mono" id="ld-dc">— V</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">Cap voltage</div>
+              <div class="lg-val mono" id="ld-cap">— V</div>
+            </div>
+            <div class="lg-item">
+              <div class="lg-lbl">Status word</div>
+              <div class="lg-val mono small" id="ld-sw">—</div>
+            </div>
+            <div class="lg-item lg-flags">
+              <div class="lg-lbl">Flags</div>
+              <div class="flags-row">
+                <span class="flag" id="flag-ready">RDY</span>
+                <span class="flag" id="flag-active">ACT</span>
+                <span class="flag" id="flag-error">ERR</span>
+                <span class="flag" id="flag-estop">STOP</span>
+                <span class="flag" id="flag-prog_done">DONE</span>
+                <span class="flag" id="flag-prog_error">PERR</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Mode selector -->
+        <div class="furnace-mode-row">
+          <label class="mode-opt">
+            <input type="radio" name="fmode" value="0" checked onchange="setFurnaceMode(0)" /> <span>Manual</span>
+          </label>
+          <label class="mode-opt">
+            <input type="radio" name="fmode" value="1" onchange="setFurnaceMode(1)" /> <span>Auto — Program</span>
+          </label>
+          <span id="prog-no-wrap" style="display:none">
+            <select id="furnace-preset-select" class="sp-input preset-select" onchange="applyPreset(this.value)"
+              title="Named program presets">
+              {% for p in furnace_presets %}
+              <option value="{{ p.prog_no if p.prog_no is not none else '' }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+            <input type="number" id="furnace-prog-no" class="sp-input" min="1" max="{{ furnace_num_programs }}"
+              value="1" style="width:56px" />
+            <button class="btn btn-xs" onclick="hpLoad()">Load</button>
+            <button class="btn btn-xs" onclick="openProgModal()">Edit</button>
+          </span>
+        </div>
+        <!-- Manual controls -->
+        <div id="manual-controls" class="furnace-ctrl-block">
+          <div class="ctrl-row">
+            <span class="ctrl-lbl">Power&nbsp;%</span>
+            <input type="range" class="ctrl-slider" id="pwr-slider" min="0" max="100" step="1" value="0"
+              oninput="syncManual()" />
+            <span class="ctrl-num mono" id="pwr-val">0</span>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-lbl">Current&nbsp;%</span>
+            <input type="range" class="ctrl-slider" id="cur-slider" min="0" max="100" step="1" value="0"
+              oninput="syncManual()" />
+            <span class="ctrl-num mono" id="cur-val">0</span>
+          </div>
+          <div class="ctrl-note">Temperature is measurement-only in manual mode — ICC sets power/current directly.</div>
+        </div>
+        <!-- Auto controls -->
+        <div id="auto-controls" class="furnace-ctrl-block" style="display:none">
+          <div class="prog-summary" id="prog-summary">No program loaded. Press <b>Load</b> to read from ICC.</div>
+          <button class="btn btn-start-prog" id="start-prog-btn" onclick="startProgram()">
+            ▶ Start Program <span id="start-prog-no">1</span>
+          </button>
+        </div>
+        <!-- Action bar -->
+        <div class="furnace-action-bar">
+          <button class="btn btn-enable" id="furnace-enable-btn" onclick="toggleFurnace()">
+            <span id="furnace-enable-text">Enable</span>
+          </button>
+          <button class="btn btn-xs" onclick="furnaceAckError()">ACK Error</button>
+          <button class="btn btn-xs" onclick="furnaceResetEnergy()">Reset Energy</button>
+          <span class="spacer"></span>
+          <span class="furnace-state-label" id="furnace-state">DISABLED</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── COL 2 BOTTOM: Camera Streams ─── -->
+    <section class="card" id="cameras-panel">
+      <div class="card-header">
+        <span class="card-icon">📷</span>
+        <h2>Camera Streams</h2>
+        <span class="card-subtitle">configure in config.py</span>
+      </div>
+      <div class="card-body">
+        {% if cameras_list %}
+        {% for cam in cameras_list %}
+        <div class="camera-feed">
+          <img src="/stream/camera/{{ cam.id }}" class="camera-img" alt="{{ cam.id }}" />
+          <div class="camera-label">{{ cam.id }} ({{ cam.type }})</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">📷</div>
+          <div class="empty-msg">No cameras configured</div>
+          <div class="empty-sub">Add entries to <code>config.CAMERAS</code></div>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- ─── COL 3 BOTTOM: Process Chart ─── -->
+    <section class="card" id="chart-panel">
+      <div class="card-header">
+        <span class="card-icon">📈</span>
+        <h2>Process Chart</h2>
+        <div class="chart-toolbar">
+          <label class="chart-tw-opt">
+            <input type="radio" name="chart-tw" value="total" checked onchange="setChartWindow('total')" /> Total
+          </label>
+          <label class="chart-tw-opt">
+            <input type="radio" name="chart-tw" value="window" onchange="setChartWindow('window')" /> Last
+            <input type="number" id="chart-tw-min" class="chart-tw-input" value="5" min="1" max="360"
+              onchange="setChartWindow('window')" /> min
+          </label>
+        </div>
+        <button class="btn btn-xs" id="chart-dl-btn" onclick="downloadCSV()" style="margin-left:auto"
+          title="Download visible data as CSV">⬇ Download Total Data</button>
+      </div>
+      <div class="chart-card-body">
+        <canvas id="process-chart"></canvas>
+      </div>
+    </section>
+
+  </main>
+
+
+
+
+
+
+  <!-- ══════ MODAL: Heating Program Editor ══════ -->
+  <div class="modal-overlay" id="prog-modal" style="display:none" onclick="if(event.target===this)closeProgModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <span>📋 Heating Program Editor</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px">Program #
+            <input type="number" id="prog-select" class="sp-input" min="1" max="{{ furnace_num_programs }}" value="1"
+              style="width:60px" />
+          </label>
+          <button class="btn btn-primary btn-xs" onclick="hpRead()">Read from ICC</button>
+          <button class="btn btn-primary btn-xs" onclick="hpWrite()">Write to ICC</button>
+          <button class="btn btn-xs" onclick="hpExport()">Export JSON</button>
+          <button class="btn btn-xs" onclick="hpImport()">Import JSON</button>
+          <input type="file" id="hp-import-file" accept=".json" style="display:none" onchange="hpImportFile(event)" />
+          <button class="btn btn-xs" onclick="closeProgModal()" style="margin-left:12px">✕ Close</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="hp-table">
+          <thead>
+            <tr>
+              <th>Phase</th>
+              <th>Active</th>
+              <th>Mode</th>
+              <th>Ctrl</th>
+              <th>Forwarding</th>
+              <th>Power ‰</th>
+              <th>Current ‰</th>
+              <th>Time (ms)</th>
+              <th>Energy SP (Ws)</th>
+              <th>E-Min</th>
+              <th>E-Max</th>
+              <th>Temp SP (°C)</th>
+              <th>T-Min</th>
+              <th>T-Max</th>
+            </tr>
+          </thead>
+          <tbody id="hp-tbody"></tbody>
+        </table>
+      </div>
+      <div class="prog-status" id="prog-status"></div>
+    </div>
+  </div>
+
+  <!-- ══════ MODAL: Error Decoder ══════ -->
+  <div class="modal-overlay" id="err-modal" style="display:none" onclick="if(event.target===this)closeErrModal()">
+    <div class="modal" style="max-width:700px">
+      <div class="modal-header">
+        <span>⚠ Error Decoder — word: <span class="mono" id="err-word-hex-modal">0x00000000</span></span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-xs" onclick="furnaceAckError()">ACK Error</button>
+          <button class="btn btn-xs" onclick="closeErrModal()">✕ Close</button>
+        </div>
+      </div>
+      <div class="error-grid" id="error-grid"></div>
+    </div>
+  </div>
+
+  <!-- ══════ MODAL: Protocol Inspector ══════ -->
+  <div class="modal-overlay proto-overlay" id="proto-modal" style="display:none"
+    onclick="if(event.target===this)closeProtoModal()">
+    <div class="modal proto-modal-box">
+      <div class="modal-header">
+        <span>🔬 Protocol Inspector — Furnace UDP Cyclic Telegram
+          <span class="mono small" id="proto-refresh-dot" style="color:#6ee7b7;margin-left:8px">⬤ live</span>
+        </span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-xs" onclick="fetchRawPackets()">↺ Refresh</button>
+          <button class="btn btn-xs" onclick="closeProtoModal()">✕ Close</button>
+        </div>
+      </div>
+      <!-- Two-panel body -->
+      <div class="proto-body">
+
+        <!-- TX panel -->
+        <div class="proto-panel" id="proto-tx-panel">
+          <div class="proto-panel-title">
+            📤 TX <span class="mono small">(PLC → ICC)</span>
+            <span class="proto-byte-count" id="proto-tx-count">0 bytes</span>
+          </div>
+          <!-- Hex dump -->
+          <div class="hex-dump" id="proto-tx-dump"></div>
+          <!-- Offset ruler -->
+          <div class="hex-ruler" id="proto-tx-ruler"></div>
+          <!-- Field list -->
+          <div class="field-list" id="proto-tx-fields"></div>
+        </div>
+
+        <!-- RX panel -->
+        <div class="proto-panel" id="proto-rx-panel">
+          <div class="proto-panel-title">
+            📥 RX <span class="mono small">(ICC → PLC)</span>
+            <span class="proto-byte-count" id="proto-rx-count">0 bytes</span>
+          </div>
+          <div class="hex-dump" id="proto-rx-dump"></div>
+          <div class="hex-ruler" id="proto-rx-ruler"></div>
+          <div class="field-list" id="proto-rx-fields"></div>
+        </div>
+
+      </div><!-- .proto-body -->
+    </div><!-- .modal -->
+  </div><!-- #proto-modal -->
+
+  <!-- ══════════════ JS ══════════════ -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/static/app.js"></script>
+  <script>
+    window.PCFG = {
+      mockMode: {{ 'true' if mock_mode else 'false' }},
+    furnaceMax: { { furnace_max } },
+    furnaceMin: { { furnace_min } },
+    numPrograms: { { furnace_num_programs } },
+    numPhases: { { furnace_num_phases } },
+    trafficRelays: { { traffic_relays | tojson } },
+    furnacePresets: { { furnace_presets | tojson } },
+};
+  </script>
+</body>
+
+</html>
