@@ -200,10 +200,10 @@ def _build_ctrl_word(ctrl: dict, hb: bool) -> int:
 def _build_output_packet(ctrl: dict, hb: bool) -> bytes:
     cw = _build_ctrl_word(ctrl, hb)
     pkt  = PREFIX
-    pkt += struct.pack("<H", cw)
-    pkt += struct.pack("<f", ctrl["current_sp"])
-    pkt += struct.pack("<f", ctrl["power_sp"])
-    pkt += struct.pack("<H", max(0, int(ctrl["heatprog_no"])))
+    pkt += struct.pack(">H", cw)
+    pkt += struct.pack(">f", ctrl["current_sp"])
+    pkt += struct.pack(">f", ctrl["power_sp"])
+    pkt += struct.pack(">H", max(0, int(ctrl["heatprog_no"])))
     pkt += SUFFIX
     return pkt  # 28 bytes
 
@@ -215,22 +215,33 @@ def _decode_error_bits(err_word: int) -> list[dict]:
     return active
 
 def _parse_input_packet(data: bytes) -> dict | None:
-    if len(data) < INPUT_PACKET_SIZE:
+    if len(data) < 58: # Minimum to get through basic status fields
+        with _lock:
+            _status["error"] = f"Packet too short: {len(data)} bytes (expected ~134)"
         return None
-    if data[:8] != PREFIX or data[126:134] != SUFFIX:
+    # Pad data with zeros if it's shorter than the full structure to prevent unpack errors
+    if len(data) < INPUT_PACKET_SIZE:
+        data = data.ljust(INPUT_PACKET_SIZE, b"\x00")
+
+    if data[:8] != PREFIX:
+        bad_pre = data[:8].decode("ascii", errors="replace")
+        with _lock:
+            _status["error"] = f"Bad signature: pfx='{bad_pre}'"
         return None
     try:
-        status_w = struct.unpack_from("<H", data, 8)[0]
-        power    = struct.unpack_from("<f", data, 24)[0]
-        i_actual = struct.unpack_from("<f", data, 12)[0]
-        freq     = struct.unpack_from("<f", data, 20)[0]
-        cap_v    = struct.unpack_from("<f", data, 28)[0]
-        dc_v     = struct.unpack_from("<f", data, 32)[0]
-        energy   = struct.unpack_from("<f", data, 36)[0]
-        water    = struct.unpack_from("<f", data, 40)[0]
-        temp     = struct.unpack_from("<H", data, 44)[0]
-        fsm_raw  = struct.unpack_from("<H", data, 52)[0]
-        err_word = struct.unpack_from("<I", data, 54)[0]
+        status_w = struct.unpack_from(">H", data, 8)[0]
+        ctrl_sw  = struct.unpack_from(">H", data, 10)[0]
+        i_actual = struct.unpack_from(">f", data, 12)[0]
+        freq     = struct.unpack_from(">f", data, 20)[0]
+        power    = struct.unpack_from(">f", data, 24)[0]
+        cap_v    = struct.unpack_from(">f", data, 28)[0]
+        dc_v     = struct.unpack_from(">f", data, 32)[0]
+        energy   = struct.unpack_from(">f", data, 36)[0]
+        water    = struct.unpack_from(">f", data, 40)[0]
+        temp     = struct.unpack_from(">H", data, 44)[0]
+        fsm_raw  = struct.unpack_from(">H", data, 52)[0]
+        err_word = struct.unpack_from(">I", data, 54)[0]
+        
         return {
             "ready":          bool(status_w & SBIT_READY),
             "active":         bool(status_w & SBIT_ACTIVE),
@@ -238,6 +249,7 @@ def _parse_input_packet(data: bytes) -> dict | None:
             "estop":          bool(status_w & SBIT_ESTOP),
             "prog_done":      bool(status_w & SBIT_PROG_DONE),
             "prog_error":     bool(status_w & SBIT_PROG_ERR),
+            "heartbeat":      bool(status_w & SBIT_HEARTBEAT),
             "fsm_state":      FSM_STATES.get(fsm_raw, f"State{fsm_raw}"),
             "actual_temp":    float(temp),
             "actual_power":   round(power, 1),
@@ -247,12 +259,13 @@ def _parse_input_packet(data: bytes) -> dict | None:
             "dc_voltage":     round(dc_v, 1),
             "actual_energy":  round(energy, 1),
             "water_flow":     round(water, 2),
+            "status_word":    status_w,
+            "ctrl_status":    ctrl_sw,
             "error_word":     err_word,
             "error_bits":     _decode_error_bits(err_word),
-            "status_word":    status_w,
             "error":          None,
         }
-    except struct.error:
+    except Exception:
         return None
 
 # ─────────────────────────────────────────────────────────────
@@ -345,11 +358,15 @@ def _real_io_loop():
     global _last_tx_bytes, _last_rx_bytes
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(config.FURNACE_TIMEOUT)
-    sock.bind(("", config.FURNACE_PORT_RECV))
+    try:
+        sock.bind((getattr(config, "HOST_IP", ""), config.FURNACE_PORT_RECV))
+    except Exception as e:
+        print(f"[furnace driver] Could not bind to HOST_IP: {e}. Falling back to 0.0.0.0")
+        sock.bind(("", config.FURNACE_PORT_RECV))
     hb = False
     hb_last = time.time()
     while True:
-        time.sleep(0.1)
+        time.sleep(0.05)
         now = time.time()
         if now - hb_last >= 1.0:
             hb = not hb
@@ -360,23 +377,34 @@ def _real_io_loop():
             _last_tx_bytes = pkt
         try:
             sock.sendto(pkt, dest)
+            # print(f"[furnace debug] SENT: {pkt.hex()} (hb={hb})")
         except Exception as e:
             with _lock:
                 _status["error"] = f"TX error: {e}"
             continue
         try:
-            data, _ = sock.recvfrom(256)
+            data, addr = sock.recvfrom(512)
+            print(f"RECEIVED {len(data)} bytes from {addr}: {data}")
+            # update raw bytes even if full parse fails, so UI can show it
+            if len(data) >= 8 and data[:8] == PREFIX:
+                with _lock:
+                    _last_rx_bytes = data[:INPUT_PACKET_SIZE]
+            
             parsed  = _parse_input_packet(data)
             if parsed:
                 with _lock:
                     _status.update(parsed)
-                    _last_rx_bytes = data[:INPUT_PACKET_SIZE]
+                    if parsed.get("ready"):
+                        print(f"[furnace debug] Parsed OK - FSM: {parsed['fsm_state']}, Temp: {parsed['actual_temp']}")
         except socket.timeout:
+            # print("[furnace debug] No response from furnace...")
             with _lock:
                 _status["error"] = f"No response from ICC at {config.FURNACE_IP}"
         except Exception as e:
+            print(f"[furnace debug] RX Error: {e}")
             with _lock:
                 _status["error"] = f"RX error: {e}"
+
 
 def _mock_loop():
     global _last_tx_bytes, _last_rx_bytes
@@ -632,18 +660,20 @@ def get_raw_packets() -> dict:
         status_snap = dict(_status)
 
     # ── TX (PLC → ICC, 28 bytes) ───────────────────────────────
-    cw = struct.unpack_from("<H", tx, 8)[0] if len(tx) >= 10 else 0
-    ci = struct.unpack_from("<f", tx, 10)[0] if len(tx) >= 14 else 0.0
-    pi = struct.unpack_from("<f", tx, 14)[0] if len(tx) >= 18 else 0.0
-    pn = struct.unpack_from("<H", tx, 18)[0] if len(tx) >= 20 else 0
+    # Ensure even the inspection values use Big-Endian packing to match reality
+    cw = struct.unpack_from(">H", tx, 8)[0] if len(tx) >= 10 else 0
+    ci = struct.unpack_from(">f", tx, 10)[0] if len(tx) >= 14 else 0.0
+    pi = struct.unpack_from(">f", tx, 14)[0] if len(tx) >= 18 else 0.0
+    pn = struct.unpack_from(">H", tx, 18)[0] if len(tx) >= 20 else 0
 
     cw_parts = []
     if cw & BIT_HEATING_ON:   cw_parts.append("HEATING_ON")
     if cw & BIT_CTRL_MODE:    cw_parts.append("CTRL_MODE")
-    if cw & BIT_SEL_TC:       cw_parts.append("SEL_TC")
+    if cw & (0x3 << 2):      cw_parts.append("SEL_TC")
     if cw & BIT_RESET_ENERGY: cw_parts.append("RESET_ENERGY")
     if cw & BIT_ACK_ERROR:    cw_parts.append("ACK_ERROR")
     if cw & BIT_HEARTBEAT:    cw_parts.append("HEARTBEAT")
+
     cw_decoded = " | ".join(cw_parts) if cw_parts else "—"
 
     tx_fields = [
@@ -651,17 +681,17 @@ def get_raw_packets() -> dict:
          "fmt": "ASCII", "raw_hex": _hex(tx, 0, 8),
          "decoded": tx[0:8].decode("ascii", errors="replace")},
         {"name": "Control Word",       "offset": 8,  "length": 2,
-         "fmt": "uint16-LE", "raw_hex": _hex(tx, 8, 2),
+         "fmt": "uint16-BE", "raw_hex": _hex(tx, 8, 2),
          "decoded": cw_decoded,
          "bits": _bits_info(cw, _CTRL_BITS)},
         {"name": "Current Setpoint %", "offset": 10, "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(tx, 10, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(tx, 10, 4),
          "decoded": f"{ci:.2f} %"},
         {"name": "Power Setpoint %",   "offset": 14, "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(tx, 14, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(tx, 14, 4),
          "decoded": f"{pi:.2f} %"},
         {"name": "Program Number",     "offset": 18, "length": 2,
-         "fmt": "uint16-LE", "raw_hex": _hex(tx, 18, 2),
+         "fmt": "uint16-BE", "raw_hex": _hex(tx, 18, 2),
          "decoded": str(pn)},
         {"name": "Suffix (BSTENDTX)",  "offset": 20, "length": 8,
          "fmt": "ASCII", "raw_hex": _hex(tx, 20, 8),
@@ -670,17 +700,17 @@ def get_raw_packets() -> dict:
 
     # ── RX (ICC → PLC, 134 bytes) ─────────────────────────────
     if len(rx) >= INPUT_PACKET_SIZE:
-        sw     = struct.unpack_from("<H", rx, 8)[0]
-        i_act  = struct.unpack_from("<f", rx, 12)[0]
-        freq   = struct.unpack_from("<f", rx, 20)[0]
-        power  = struct.unpack_from("<f", rx, 24)[0]
-        cap_v  = struct.unpack_from("<f", rx, 28)[0]
-        dc_v   = struct.unpack_from("<f", rx, 32)[0]
-        energy = struct.unpack_from("<f", rx, 36)[0]
-        water  = struct.unpack_from("<f", rx, 40)[0]
-        temp   = struct.unpack_from("<H", rx, 44)[0]
-        fsm    = struct.unpack_from("<H", rx, 52)[0]
-        err_w  = struct.unpack_from("<I", rx, 54)[0]
+        sw     = struct.unpack_from(">H", rx, 8)[0]
+        i_act  = struct.unpack_from(">f", rx, 12)[0]
+        freq   = struct.unpack_from(">f", rx, 20)[0]
+        power  = struct.unpack_from(">f", rx, 24)[0]
+        cap_v  = struct.unpack_from(">f", rx, 28)[0]
+        dc_v   = struct.unpack_from(">f", rx, 32)[0]
+        energy = struct.unpack_from(">f", rx, 36)[0]
+        water  = struct.unpack_from(">f", rx, 40)[0]
+        temp   = struct.unpack_from(">H", rx, 44)[0]
+        fsm    = struct.unpack_from(">H", rx, 52)[0]
+        err_w  = struct.unpack_from(">I", rx, 54)[0]
     else:
         sw = i_act = freq = power = cap_v = dc_v = energy = water = 0
         temp = fsm = err_w = 0
@@ -711,44 +741,44 @@ def get_raw_packets() -> dict:
          "fmt": "ASCII", "raw_hex": _hex(rx, 0, 8),
          "decoded": rx[0:8].decode("ascii", errors="replace")},
         {"name": "Status Word",         "offset": 8,   "length": 2,
-         "fmt": "uint16-LE", "raw_hex": _hex(rx, 8, 2),
+         "fmt": "uint16-BE", "raw_hex": _hex(rx, 8, 2),
          "decoded": sw_decoded,
          "bits": _bits_info(sw, _STATUS_BITS)},
-        {"name": "reserved",            "offset": 10,  "length": 2,
-         "fmt": "bytes", "raw_hex": _hex(rx, 10, 2), "decoded": "—"},
+        {"name": "Controller Status",   "offset": 10,  "length": 2,
+         "fmt": "uint16-BE", "raw_hex": _hex(rx, 10, 2), "decoded": "—"},
         {"name": "Actual Current (A)",  "offset": 12,  "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 12, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 12, 4),
          "decoded": f"{i_act:.3f} A"},
         {"name": "reserved",            "offset": 16,  "length": 4,
          "fmt": "bytes", "raw_hex": _hex(rx, 16, 4), "decoded": "—"},
         {"name": "Actual Frequency (Hz)","offset": 20, "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 20, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 20, 4),
          "decoded": f"{freq:.0f} Hz"},
         {"name": "Actual Power (W)",    "offset": 24,  "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 24, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 24, 4),
          "decoded": f"{power:.1f} W"},
         {"name": "Capacitor Voltage (V)","offset": 28, "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 28, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 28, 4),
          "decoded": f"{cap_v:.1f} V"},
         {"name": "DC Link Voltage (V)", "offset": 32,  "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 32, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 32, 4),
          "decoded": f"{dc_v:.1f} V"},
         {"name": "Energy (Ws)",         "offset": 36,  "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 36, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 36, 4),
          "decoded": f"{energy:.1f} Ws"},
         {"name": "Water Flow (l/min)",  "offset": 40,  "length": 4,
-         "fmt": "float32-LE", "raw_hex": _hex(rx, 40, 4),
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 40, 4),
          "decoded": f"{water:.2f} l/min"},
         {"name": "Temperature (°C)",    "offset": 44,  "length": 2,
-         "fmt": "uint16-LE", "raw_hex": _hex(rx, 44, 2),
+         "fmt": "uint16-BE", "raw_hex": _hex(rx, 44, 2),
          "decoded": f"{temp} °C"},
         {"name": "reserved",            "offset": 46,  "length": 6,
          "fmt": "bytes", "raw_hex": _hex(rx, 46, 6), "decoded": "—"},
         {"name": "FSM State",           "offset": 52,  "length": 2,
-         "fmt": "uint16-LE", "raw_hex": _hex(rx, 52, 2),
+         "fmt": "uint16-BE", "raw_hex": _hex(rx, 52, 2),
          "decoded": f"{fsm_name} (raw {fsm})"},
         {"name": "Error Word",          "offset": 54,  "length": 4,
-         "fmt": "uint32-LE", "raw_hex": _hex(rx, 54, 4),
+         "fmt": "uint32-BE", "raw_hex": _hex(rx, 54, 4),
          "decoded": f"0x{err_w:08X}" + (" — " + ", ".join(e["name"] for e in err_bits_active) if err_bits_active else " — no errors"),
          "bits": err_bits_all},
         {"name": "Payload (reserved)",  "offset": 58,  "length": 68,

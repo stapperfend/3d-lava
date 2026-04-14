@@ -7,7 +7,7 @@
 # Global mock mode
 # Set MOCK = True to run the GUI without any real hardware connected.
 # ---------------------------------------------------------------------------
-MOCK = True
+MOCK = False
 
 # ---------------------------------------------------------------------------
 # NI cRIO
@@ -57,12 +57,13 @@ DUET_TIMEOUT = 5.0
 # Induction Furnace (UDP) — COBES i-class compact
 # Protocol: "800 0031.02_BA_EN_Bedienungsanleitung i-class compact.pdf"
 # ---------------------------------------------------------------------------
-FURNACE_IP           = "192.168.1.30"
+FURNACE_IP           = "192.168.1.191"
+HOST_IP              = "192.168.1.192" # Force UDP to use the physical Ethernet adapter
 FURNACE_PORT_SEND    = 5010    # Main control  telegrams  → ICC (section 9.1)
 FURNACE_PORT_RECV    = 5010    # Main status   telegrams ← ICC (section 9.2)
 FURNACE_SERVICE_PORT = 4660    # Service protocol: heating programs (section 9.4)
 FURNACE_CONSOLE_PORT = 4661    # Text console — send "HELLO" to activate
-FURNACE_TIMEOUT      = 0.5
+FURNACE_TIMEOUT      = 0.05    # Prevent Python from stalling and missing the hardware 500ms keep-alive
 
 # Furnace setpoint limits (safety clamp)
 FURNACE_MIN_SP = 0.0

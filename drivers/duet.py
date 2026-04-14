@@ -276,6 +276,7 @@ def _mock_gcode(cmd: str) -> dict:
     return {"ok": True, "response": resp, "error": None}
 
 import time as _time
+import random as _random
 
 _MOCK_START_TIME = _time.time()
 
