@@ -390,9 +390,14 @@ def _real_io_loop():
             # Only accept data that is at least INPUT_PACKET_SIZE bytes (134) to avoid
             # storing our own 28-byte TX packets as RX data (UDP echo on same port)
             if len(data) >= INPUT_PACKET_SIZE and data[:8] == PREFIX:
+                print(f"[DEBUG] About to store - data[:8] hex: {data[:8].hex().upper()}")
                 with _lock:
+                    print(f"[DEBUG] Inside lock - _last_rx_bytes id before: {id(_last_rx_bytes)}")
                     _last_rx_bytes = data[:INPUT_PACKET_SIZE]
-                print(f"[DEBUG] Stored RX bytes: {_last_rx_bytes[:20].hex().upper()}...")
+                    print(f"[DEBUG] Inside lock - _last_rx_bytes id after: {id(_last_rx_bytes)}")
+                    print(f"[DEBUG] Inside lock - _last_rx_bytes[:8] hex: {_last_rx_bytes[:8].hex().upper()}")
+                print(f"[DEBUG] After lock - _last_rx_bytes[:8] hex: {_last_rx_bytes[:8].hex().upper()}")
+                print(f"[DEBUG] After lock - _last_rx_bytes id: {id(_last_rx_bytes)}")
             
             parsed  = _parse_input_packet(data)
             if parsed:
