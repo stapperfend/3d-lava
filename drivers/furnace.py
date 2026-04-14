@@ -328,20 +328,20 @@ def _build_mock_rx_packet(st: dict) -> bytes:
     fsm_raw = fsm_rev.get(st.get("fsm_state", "Ready"), 9)
 
     pkt  = PREFIX                                              # bytes 0-7
-    pkt += struct.pack("<H", sw)                              # bytes 8-9   status_word
+    pkt += struct.pack(">H", sw)                              # bytes 8-9   status_word (big-endian to match parser)
     pkt += b"\x00" * 2                                        # bytes 10-11 reserved
-    pkt += struct.pack("<f", float(st.get("actual_current", 0))) # bytes 12-15
+    pkt += struct.pack(">f", float(st.get("actual_current", 0))) # bytes 12-15 (big-endian to match parser)
     pkt += b"\x00" * 4                                        # bytes 16-19 reserved
-    pkt += struct.pack("<f", float(st.get("actual_freq",  0)))   # bytes 20-23
-    pkt += struct.pack("<f", float(st.get("actual_power", 0)))   # bytes 24-27
-    pkt += struct.pack("<f", float(st.get("cap_voltage",  0)))   # bytes 28-31
-    pkt += struct.pack("<f", float(st.get("dc_voltage",   0)))   # bytes 32-35
-    pkt += struct.pack("<f", float(st.get("actual_energy",0)))   # bytes 36-39
-    pkt += struct.pack("<f", float(st.get("water_flow",   0)))   # bytes 40-43
-    pkt += struct.pack("<H", int(st.get("actual_temp",    0)))   # bytes 44-45
+    pkt += struct.pack(">f", float(st.get("actual_freq",  0)))   # bytes 20-23 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("actual_power", 0)))   # bytes 24-27 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("cap_voltage",  0)))   # bytes 28-31 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("dc_voltage",   0)))   # bytes 32-35 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("actual_energy",0)))   # bytes 36-39 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("water_flow",   0)))   # bytes 40-43 (big-endian to match parser)
+    pkt += struct.pack(">H", int(st.get("actual_temp",    0)))   # bytes 44-45 (big-endian to match parser)
     pkt += b"\x00" * 6                                        # bytes 46-51 reserved
-    pkt += struct.pack("<H", fsm_raw)                         # bytes 52-53
-    pkt += struct.pack("<I", int(st.get("error_word",   0)))  # bytes 54-57
+    pkt += struct.pack(">H", fsm_raw)                         # bytes 52-53 (big-endian to match parser)
+    pkt += struct.pack(">I", int(st.get("error_word",   0)))  # bytes 54-57 (big-endian to match parser)
     # Pad to position 126 (suffix at 126-133)
     pad_len = 126 - len(pkt)
     pkt += b"\x00" * pad_len
@@ -385,10 +385,14 @@ def _real_io_loop():
         try:
             data, addr = sock.recvfrom(512)
             print(f"RECEIVED {len(data)} bytes from {addr}: {data}")
+            print(f"[DEBUG] RX len={len(data)}, prefix_ok={data[:8] == PREFIX if len(data) >= 8 else False}, will_store={len(data) >= INPUT_PACKET_SIZE and data[:8] == PREFIX}")
             # update raw bytes even if full parse fails, so UI can show it
-            if len(data) >= 8 and data[:8] == PREFIX:
+            # Only accept data that is at least INPUT_PACKET_SIZE bytes (134) to avoid
+            # storing our own 28-byte TX packets as RX data (UDP echo on same port)
+            if len(data) >= INPUT_PACKET_SIZE and data[:8] == PREFIX:
                 with _lock:
                     _last_rx_bytes = data[:INPUT_PACKET_SIZE]
+                print(f"[DEBUG] Stored RX bytes: {_last_rx_bytes[:20].hex().upper()}...")
             
             parsed  = _parse_input_packet(data)
             if parsed:
