@@ -453,10 +453,18 @@ def _mock_loop():
 # ─────────────────────────────────────────────────────────────
 # Start background thread
 # ─────────────────────────────────────────────────────────────
-if config.MOCK:
-    threading.Thread(target=_mock_loop, daemon=True).start()
-else:
-    threading.Thread(target=_real_io_loop, daemon=True).start()
+# When Flask debug mode is enabled, the reloader forks a child process and
+# re-imports all modules. We only want ONE IO thread, so we check for the
+# WERKZEUG_RUN_MAIN env var which is set in the child process.
+import os
+_is_reloader_child = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+
+if _is_reloader_child:
+    # This is the Flask reloader child process - start the IO thread
+    if config.MOCK:
+        threading.Thread(target=_mock_loop, daemon=True).start()
+    else:
+        threading.Thread(target=_real_io_loop, daemon=True).start()
 
 # ─────────────────────────────────────────────────────────────
 # Public API — main control
