@@ -663,8 +663,8 @@ def get_raw_packets() -> dict:
             "bits" (only for word fields) }
     """
     # Debug: check the global variable directly before acquiring lock
-    print(f"[INSPECTOR DEBUG] Before lock - _last_rx_bytes len={len(_last_rx_bytes)}, first 8 bytes: {_last_rx_bytes[:8].hex().upper() if len(_last_rx_bytes) >= 8 else 'N/A'}")
-    print(f"[INSPECTOR DEBUG] Before lock - _last_rx_bytes id={id(_last_rx_bytes)}")
+    print(f"[INSPECTOR DEBUG] GLOBAL _last_rx_bytes len={len(_last_rx_bytes)}, first 8 bytes: {_last_rx_bytes[:8].hex().upper() if len(_last_rx_bytes) >= 8 else 'N/A'}")
+    print(f"[INSPECTOR DEBUG] GLOBAL _last_rx_bytes id={id(_last_rx_bytes)}")
     
     with _lock:
         print(f"[INSPECTOR DEBUG] Inside lock - _last_rx_bytes len={len(_last_rx_bytes)}, first 8 bytes: {_last_rx_bytes[:8].hex().upper() if len(_last_rx_bytes) >= 8 else 'N/A'}")
