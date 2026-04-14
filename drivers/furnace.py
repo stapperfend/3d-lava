@@ -662,6 +662,11 @@ def get_raw_packets() -> dict:
         rx = bytes(_last_rx_bytes)
         ctrl_snap  = dict(_ctrl)
         status_snap = dict(_status)
+    
+    # Debug: log the raw RX bytes being returned
+    print(f"[INSPECTOR DEBUG] TX len={len(tx)}, RX len={len(rx)}")
+    print(f"[INSPECTOR DEBUG] RX first 20 bytes hex: {rx[:20].hex().upper()}")
+    print(f"[INSPECTOR DEBUG] RX all zeros: {all(b == 0 for b in rx)}")
 
     # ── TX (PLC → ICC, 28 bytes) ───────────────────────────────
     # Ensure even the inspection values use Big-Endian packing to match reality
