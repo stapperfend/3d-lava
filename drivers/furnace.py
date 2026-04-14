@@ -390,14 +390,8 @@ def _real_io_loop():
             # Only accept data that is at least INPUT_PACKET_SIZE bytes (134) to avoid
             # storing our own 28-byte TX packets as RX data (UDP echo on same port)
             if len(data) >= INPUT_PACKET_SIZE and data[:8] == PREFIX:
-                print(f"[DEBUG] About to store - data[:8] hex: {data[:8].hex().upper()}")
                 with _lock:
-                    print(f"[DEBUG] Inside lock - _last_rx_bytes id before: {id(_last_rx_bytes)}")
                     _last_rx_bytes = data[:INPUT_PACKET_SIZE]
-                    print(f"[DEBUG] Inside lock - _last_rx_bytes id after: {id(_last_rx_bytes)}")
-                    print(f"[DEBUG] Inside lock - _last_rx_bytes[:8] hex: {_last_rx_bytes[:8].hex().upper()}")
-                print(f"[DEBUG] After lock - _last_rx_bytes[:8] hex: {_last_rx_bytes[:8].hex().upper()}")
-                print(f"[DEBUG] After lock - _last_rx_bytes id: {id(_last_rx_bytes)}")
             
             parsed  = _parse_input_packet(data)
             if parsed:
@@ -670,22 +664,9 @@ def get_raw_packets() -> dict:
           { "name", "offset", "length", "fmt", "raw_hex", "decoded",
             "bits" (only for word fields) }
     """
-    # Debug: check the global variable directly before acquiring lock
-    print(f"[INSPECTOR DEBUG] GLOBAL _last_rx_bytes len={len(_last_rx_bytes)}, first 8 bytes: {_last_rx_bytes[:8].hex().upper() if len(_last_rx_bytes) >= 8 else 'N/A'}")
-    print(f"[INSPECTOR DEBUG] GLOBAL _last_rx_bytes id={id(_last_rx_bytes)}")
-    
     with _lock:
-        print(f"[INSPECTOR DEBUG] Inside lock - _last_rx_bytes len={len(_last_rx_bytes)}, first 8 bytes: {_last_rx_bytes[:8].hex().upper() if len(_last_rx_bytes) >= 8 else 'N/A'}")
-        print(f"[INSPECTOR DEBUG] Inside lock - _last_rx_bytes id={id(_last_rx_bytes)}")
         tx = bytes(_last_tx_bytes)
         rx = bytes(_last_rx_bytes)
-        ctrl_snap  = dict(_ctrl)
-        status_snap = dict(_status)
-    
-    # Debug: log the raw RX bytes being returned
-    print(f"[INSPECTOR DEBUG] After lock - TX len={len(tx)}, RX len={len(rx)}")
-    print(f"[INSPECTOR DEBUG] After lock - RX first 20 bytes hex: {rx[:20].hex().upper()}")
-    print(f"[INSPECTOR DEBUG] RX all zeros: {all(b == 0 for b in rx)}")
 
     # ── TX (PLC → ICC, 28 bytes) ───────────────────────────────
     # Ensure even the inspection values use Big-Endian packing to match reality
