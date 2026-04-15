@@ -1,7 +1,7 @@
 """
 drivers/furnace.py  —  COBES i-class compact Induction Furnace driver
 ======================================================================
-Protocol source: 800 0031.02_BA_EN_Bedienungsanleitung i-class compact.pdf
+Protocol source: 800 0031.03_BA_Bedienungsanleitung i-class compact.pdf
 
 MAIN CONTROL (cyclic, port 5010)
   PLC → ICC:  28 bytes   BSTSTART + ctrl_word(U16) + curr_sp(f32) + pwr_sp(f32) + prog_no(U16) + BSTENDTX
@@ -238,9 +238,12 @@ def _parse_input_packet(data: bytes) -> dict | None:
         dc_v     = struct.unpack_from(">f", data, 32)[0]
         energy   = struct.unpack_from(">f", data, 36)[0]
         water    = struct.unpack_from(">f", data, 40)[0]
-        temp     = struct.unpack_from(">H", data, 44)[0]
+        temp     = struct.unpack_from(">f", data, 44)[0]  # Updated to REAL (4 bytes) per manual 800 0031.03
+        prog_no  = struct.unpack_from(">H", data, 48)[0]
+        prog_phase = struct.unpack_from(">H", data, 50)[0]
         fsm_raw  = struct.unpack_from(">H", data, 52)[0]
         err_word = struct.unpack_from(">I", data, 54)[0]
+        err_word_prog = struct.unpack_from(">I", data, 58)[0]
         
         return {
             "ready":          bool(status_w & SBIT_READY),
@@ -258,10 +261,13 @@ def _parse_input_packet(data: bytes) -> dict | None:
             "cap_voltage":    round(cap_v, 1),
             "dc_voltage":     round(dc_v, 1),
             "actual_energy":  round(energy, 1),
-            "water_flow":     round(water, 2),
+            "water_flow":     round(abs(water), 2),  # Use absolute value to fix negative flow
             "status_word":    status_w,
             "ctrl_status":    ctrl_sw,
             "error_word":     err_word,
+            "error_word_prog": err_word_prog,
+            "heating_program": prog_no,
+            "heating_program_phase": prog_phase,
             "error_bits":     _decode_error_bits(err_word),
             "error":          None,
         }
@@ -315,7 +321,7 @@ def _service_send_recv(pkt: bytes) -> bytes | None:
 # Mock RX packet builder (for inspector in mock mode)
 # ─────────────────────────────────────────────────────────────
 def _build_mock_rx_packet(st: dict) -> bytes:
-    """Build a plausible 134-byte ICC→PLC status packet from _status."""
+    """Build a plausible 134-byte ICC→PLC status packet from _status (manual 800 0031.03)."""
     sw = 0
     if st.get("ready"):     sw |= SBIT_READY
     if st.get("active"):    sw |= SBIT_ACTIVE
@@ -328,20 +334,22 @@ def _build_mock_rx_packet(st: dict) -> bytes:
     fsm_raw = fsm_rev.get(st.get("fsm_state", "Ready"), 9)
 
     pkt  = PREFIX                                              # bytes 0-7
-    pkt += struct.pack(">H", sw)                              # bytes 8-9   status_word (big-endian to match parser)
+    pkt += struct.pack(">H", sw)                              # bytes 8-9   status_word (big-endian)
     pkt += b"\x00" * 2                                        # bytes 10-11 reserved
-    pkt += struct.pack(">f", float(st.get("actual_current", 0))) # bytes 12-15 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("actual_current", 0))) # bytes 12-15 (big-endian)
     pkt += b"\x00" * 4                                        # bytes 16-19 reserved
-    pkt += struct.pack(">f", float(st.get("actual_freq",  0)))   # bytes 20-23 (big-endian to match parser)
-    pkt += struct.pack(">f", float(st.get("actual_power", 0)))   # bytes 24-27 (big-endian to match parser)
-    pkt += struct.pack(">f", float(st.get("cap_voltage",  0)))   # bytes 28-31 (big-endian to match parser)
-    pkt += struct.pack(">f", float(st.get("dc_voltage",   0)))   # bytes 32-35 (big-endian to match parser)
-    pkt += struct.pack(">f", float(st.get("actual_energy",0)))   # bytes 36-39 (big-endian to match parser)
-    pkt += struct.pack(">f", float(st.get("water_flow",   0)))   # bytes 40-43 (big-endian to match parser)
-    pkt += struct.pack(">H", int(st.get("actual_temp",    0)))   # bytes 44-45 (big-endian to match parser)
-    pkt += b"\x00" * 6                                        # bytes 46-51 reserved
-    pkt += struct.pack(">H", fsm_raw)                         # bytes 52-53 (big-endian to match parser)
-    pkt += struct.pack(">I", int(st.get("error_word",   0)))  # bytes 54-57 (big-endian to match parser)
+    pkt += struct.pack(">f", float(st.get("actual_freq",  0)))   # bytes 20-23 (big-endian)
+    pkt += struct.pack(">f", float(st.get("actual_power", 0)))   # bytes 24-27 (big-endian)
+    pkt += struct.pack(">f", float(st.get("cap_voltage",  0)))   # bytes 28-31 (big-endian)
+    pkt += struct.pack(">f", float(st.get("dc_voltage",   0)))   # bytes 32-35 (big-endian)
+    pkt += struct.pack(">f", float(st.get("actual_energy",0)))   # bytes 36-39 (big-endian)
+    pkt += struct.pack(">f", float(st.get("water_flow",   0)))   # bytes 40-43 (big-endian)
+    pkt += struct.pack(">f", float(st.get("actual_temp",    0))) # bytes 44-47 Temperature as REAL (4 bytes) per manual 800 0031.03
+    pkt += struct.pack(">H", 0)                               # bytes 48-49 Heating program number
+    pkt += struct.pack(">H", 0)                               # bytes 50-51 Heating program phase
+    pkt += struct.pack(">H", fsm_raw)                         # bytes 52-53 FSM state (big-endian)
+    pkt += struct.pack(">H", 0)                               # bytes 54-55 reserved
+    pkt += struct.pack(">I", int(st.get("error_word",   0)))  # bytes 56-59 Error word (big-endian)
     # Pad to position 126 (suffix at 126-133)
     pad_len = 126 - len(pkt)
     pkt += b"\x00" * pad_len
@@ -717,12 +725,14 @@ def get_raw_packets() -> dict:
         dc_v   = struct.unpack_from(">f", rx, 32)[0]
         energy = struct.unpack_from(">f", rx, 36)[0]
         water  = struct.unpack_from(">f", rx, 40)[0]
-        temp   = struct.unpack_from(">H", rx, 44)[0]
+        temp   = struct.unpack_from(">f", rx, 44)[0]  # REAL (4 bytes) per manual 800 0031.03
+        prog_no = struct.unpack_from(">H", rx, 48)[0]
+        prog_phase = struct.unpack_from(">H", rx, 50)[0]
         fsm    = struct.unpack_from(">H", rx, 52)[0]
         err_w  = struct.unpack_from(">I", rx, 54)[0]
+        err_w_prog = struct.unpack_from(">I", rx, 58)[0]
     else:
-        sw = i_act = freq = power = cap_v = dc_v = energy = water = 0
-        temp = fsm = err_w = 0
+        sw = i_act = freq = power = cap_v = dc_v = energy = water = temp = prog_no = prog_phase = fsm = err_w = err_w_prog = 0
 
     sw_parts = []
     if sw & SBIT_READY:     sw_parts.append("READY")
@@ -778,11 +788,15 @@ def get_raw_packets() -> dict:
         {"name": "Water Flow (l/min)",  "offset": 40,  "length": 4,
          "fmt": "float32-BE", "raw_hex": _hex(rx, 40, 4),
          "decoded": f"{water:.2f} l/min"},
-        {"name": "Temperature (°C)",    "offset": 44,  "length": 2,
-         "fmt": "uint16-BE", "raw_hex": _hex(rx, 44, 2),
-         "decoded": f"{temp} °C"},
-        {"name": "reserved",            "offset": 46,  "length": 6,
-         "fmt": "bytes", "raw_hex": _hex(rx, 46, 6), "decoded": "—"},
+        {"name": "Temperature (°C)",    "offset": 44,  "length": 4,
+         "fmt": "float32-BE", "raw_hex": _hex(rx, 44, 4),
+         "decoded": f"{temp:.1f} °C"},
+        {"name": "Heating Program No",  "offset": 48,  "length": 2,
+         "fmt": "uint16-BE", "raw_hex": _hex(rx, 48, 2),
+         "decoded": str(prog_no)},
+        {"name": "Heating Program Phase","offset": 50, "length": 2,
+         "fmt": "uint16-BE", "raw_hex": _hex(rx, 50, 2),
+         "decoded": str(prog_phase)},
         {"name": "FSM State",           "offset": 52,  "length": 2,
          "fmt": "uint16-BE", "raw_hex": _hex(rx, 52, 2),
          "decoded": f"{fsm_name} (raw {fsm})"},
@@ -790,8 +804,11 @@ def get_raw_packets() -> dict:
          "fmt": "uint32-BE", "raw_hex": _hex(rx, 54, 4),
          "decoded": f"0x{err_w:08X}" + (" — " + ", ".join(e["name"] for e in err_bits_active) if err_bits_active else " — no errors"),
          "bits": err_bits_all},
-        {"name": "Payload (reserved)",  "offset": 58,  "length": 68,
-         "fmt": "bytes", "raw_hex": _hex(rx, 58, 68), "decoded": f"68 reserved bytes"},
+        {"name": "Error Word (Heating Prog)","offset": 58, "length": 4,
+         "fmt": "uint32-BE", "raw_hex": _hex(rx, 58, 4),
+         "decoded": f"0x{err_w_prog:08X}"},
+        {"name": "Payload (reserved)",  "offset": 62,  "length": 64,
+         "fmt": "bytes", "raw_hex": _hex(rx, 62, 64), "decoded": f"64 reserved bytes"},
         {"name": "Suffix (BSTENDTX)",   "offset": 126, "length": 8,
          "fmt": "ASCII", "raw_hex": _hex(rx, 126, 8),
          "decoded": rx[126:134].decode("ascii", errors="replace")},
