@@ -523,13 +523,13 @@
   <script>
     window.PCFG = {
       mockMode: {{ 'true' if mock_mode else 'false' }},
-    furnaceMax: { { furnace_max } },
-    furnaceMin: { { furnace_min } },
-    numPrograms: { { furnace_num_programs } },
-    numPhases: { { furnace_num_phases } },
-    trafficRelays: { { traffic_relays | tojson } },
-    furnacePresets: { { furnace_presets | tojson } },
-};
+      furnaceMax: {{ furnace_max }},
+      furnaceMin: {{ furnace_min }},
+      numPrograms: {{ furnace_num_programs }},
+      numPhases: {{ furnace_num_phases }},
+      trafficRelays: {{ traffic_relays | tojson }},
+      furnacePresets: {{ furnace_presets | tojson }},
+    };
   </script>
 </body>
 
