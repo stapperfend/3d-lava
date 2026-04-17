@@ -20,10 +20,11 @@ const S = {
   currentProgram: [],
   wfState: "idle",
   lastErrWord: -1,
+  _isProgFocus: false, // Focus tracking
 };
 
 // ── Clock ──────────────────────────────────────────────────
-setInterval(() => { el("clock").textContent = new Date().toLocaleTimeString("de-DE", { hour12: false }); }, 1000);
+setInterval(() => { el("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }); }, 1000);
 
 // ── GCode log ──────────────────────────────────────────────
 function appendLog(msg, cls = "log-info") {
@@ -57,6 +58,17 @@ function updateTrafficLight({ state }) {
   const lbl = el("tl-label");
   lbl.textContent = TL_LABELS[state] || "—";
   lbl.style.color = state === "green" ? "var(--green)" : state === "yellow" ? "var(--yellow)" : state === "red" ? "var(--red)" : "var(--muted)";
+}
+
+function setFurnaceTab(mode) {
+  S.furnaceMode = mode;
+  el("manual-controls").style.display = mode === 0 ? "block" : "none";
+  el("auto-controls").style.display = mode === 1 ? "block" : "none";
+  el("tab-btn-manual").classList.toggle("active", mode === 0);
+  el("tab-btn-prog").classList.toggle("active", mode === 1);
+  
+  // Sync mode to backend
+  post("/api/furnace/mode", { mode: mode });
 }
 
 // ── cRIO UI ─────────────────────────────────────────────────
@@ -175,9 +187,57 @@ function updateFurnaceUI(data) {
   ld("ld-energy", data.actual_energy, "Ws", 0);
   ld("ld-dc", data.dc_voltage, "V", 1);
   ld("ld-cap", data.cap_voltage, "V", 1);
-  if (el("ld-sw")) el("ld-sw").textContent = data.status_word != null ? "0x" + data.status_word.toString(16).padStart(4, "0").toUpperCase() : "—";
+  if (el("ld-sw")) el("ld-sw").textContent = data.status_word ? `0x${data.status_word.toString(16).toUpperCase().padStart(4, "0")}` : "0x0000";
 
-  // Status flags
+  // ── Mode Tab Remote Sync ──
+  if (data.ctrl_mode !== undefined && data.ctrl_mode !== S.furnaceMode) {
+    const m = data.ctrl_mode;
+    S.furnaceMode = m;
+    el("manual-controls").style.display = m === 0 ? "block" : "none";
+    el("auto-controls").style.display = m === 1 ? "block" : "none";
+    el("tab-btn-manual").classList.toggle("active", m === 0);
+    el("tab-btn-prog").classList.toggle("active", m === 1);
+  }
+
+  // ── Program Selection Sync ──
+  const numInput = el("furnace-prog-no");
+  if (numInput && data.heating_program !== undefined) {
+    // Only Sync if NOT focused AND the process has GONE ACTIVE
+    if (!S._isProgFocus && data.active) {
+      if (parseInt(numInput.value) !== data.heating_program) {
+        numInput.value = data.heating_program;
+        hpLoad(); // Sync phase descriptions once the program starts
+      }
+    }
+  }
+
+  // Progress Panel Detail
+  const panel = el("prog-progress-panel");
+  if (panel) {
+    const isProgActive = !!(data.heating_program && data.active);
+    panel.style.display = isProgActive ? "block" : "none";
+
+    if (isProgActive) {
+      const phIdx = (data.heating_program_phase || 1) - 1;
+      const totalPhases = S.currentProgram.filter(p => p.active === 0).length || 8;
+      const currPh = S.currentProgram[phIdx] || {};
+      const nextPh = S.currentProgram[phIdx + 1] || null;
+
+      const getDesc = (p, idx) => {
+        if (!p || Object.keys(p).length === 0) return "Finished / None";
+        const m = p.mode === 1 ? "Temp" : "Power";
+        const val = p.mode === 1 ? `${p.temp_sp}°C` : `${p.power_pm}%`;
+        return `Step ${idx+1}: ${m} → ${val}`;
+      };
+
+      if (el("pp-curr")) el("pp-curr").textContent = getDesc(currPh, phIdx);
+      if (el("pp-next")) el("pp-next").textContent = nextPh ? getDesc(nextPh, phIdx + 1) : "None (End of Program)";
+      const bar = el("pp-bar");
+      if (bar) bar.style.width = Math.round(((phIdx + 1) / totalPhases) * 100) + "%";
+    }
+  }
+
+  const sp = data.target_temp || data.temp_sp || 0;
   const fmap = { ready: data.ready, active: data.active, error: data.error, estop: data.estop, prog_done: data.prog_done, prog_error: data.prog_error };
   for (const [key, val] of Object.entries(fmap)) {
     const f = el(`flag-${key}`); if (!f) continue;
@@ -285,44 +345,33 @@ let _manualTimer = null;
 
 // ── Auto mode: load program from ICC ─────────────────────────
 async function hpLoad() {
-  const n = parseInt(el("furnace-prog-no")?.value || 1);
-  S.progNo = n;
-  if (el("start-prog-no")) el("start-prog-no").textContent = n;
-  if (el("prog-select")) el("prog-select").value = n;
-  const d = await get(`/api/furnace/program/${n}`);
-  if (!d.ok) {
-    if (el("prog-summary")) el("prog-summary").innerHTML = `<span style="color:var(--red)">✖ ${d.error}</span>`;
-    return;
-  }
-  S.currentProgram = d.phases;
-  S.progLoaded = true;
-  const actives = d.phases.filter(p => p.active === 0).length;
-  if (el("prog-summary")) el("prog-summary").textContent = `Program ${n} — ${actives} active phase${actives !== 1 ? "s" : ""}`;
-}
-
-async function applyPreset(val) {
-  if (!val) return;   // "— select preset —" chosen
-  const n = parseInt(val);
-  if (isNaN(n)) return;
-  S.progNo = n;
-  // Sync the number input and start-program label
-  const inp = el("furnace-prog-no");
-  if (inp) inp.value = n;
-  if (el("start-prog-no")) el("start-prog-no").textContent = n;
-  if (el("prog-select")) el("prog-select").value = n;
-  // Auto-load program from ICC so the phase summary updates
-  await hpLoad();
-}
-
-async function startProgram() {
   const n = parseInt(el("furnace-prog-no")?.value || S.progNo);
-  const d = await post("/api/furnace/start_program", { prog_no: n });
-  if (el("prog-summary")) el("prog-summary").textContent = d.ok
-    ? `▶ Running Program ${n}…`
-    : `✖ ${d.error}`;
+  if (!n || isNaN(n)) return;
+  S.progNo = n;
+  
+  // Update Backend selection
+  const resp = await post("/api/furnace/program/select", { prog_no: n });
+  if (!resp.ok) {
+     appendLog(`✖ Selection Failed: ${resp.error}`, "log-error");
+     return;
+  }
+
+  const summary = el("prog-summary");
+  if (summary) summary.textContent = `Syncing program ${n}...`;
+
+  const d = await get(`/api/furnace/program/${n}`);
+  if (d.ok) {
+    S.currentProgram = d.phases;
+    const actives = d.phases.filter(p => p.active === 0).length;
+    if (summary) summary.textContent = `Program ${n} synced: ${actives} active phases ready.`;
+  } else {
+    if (summary) summary.innerHTML = `<span style="color:var(--red)">✖ Phase Sync Failed: ${d.error}</span>`;
+  }
 }
 
-async function toggleFurnace() { await post("/api/furnace/enable", { enable: !S.furnaceEnabled }); }
+async function toggleFurnace() { 
+  await post("/api/furnace/enable", { enable: !S.furnaceEnabled }); 
+}
 async function furnaceAckError() { await post("/api/furnace/ack_error"); appendLog("⚡ ACK Error.", "log-info"); }
 async function furnaceResetEnergy() { await post("/api/furnace/reset_energy"); appendLog("⚡ Energy reset.", "log-info"); }
 
@@ -686,7 +735,7 @@ function initChart() {
           callbacks: {
             title: items => {
               const t = items[0]?.parsed?.x;
-              return t ? new Date(t).toLocaleTimeString("de-DE") : "";
+              return t ? new Date(t).toLocaleTimeString("en-GB") : "";
             },
             label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y == null ? "—" : ctx.parsed.y.toFixed(2)}`,
           },
@@ -856,6 +905,16 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchHistory();
   initViz();
   loadGcodeEditors();
+
+  // Focus tracking for program number
+  const fpn = el("furnace-prog-no");
+  if (fpn) {
+    fpn.addEventListener("focus", () => { S._isProgFocus = true; });
+    fpn.addEventListener("blur", () => { S._isProgFocus = false; });
+  }
+
+  // Initialize selection
+  if (el("furnace-prog-no")) el("furnace-prog-no").value = S.progNo;
 });
 
 // ═══════════════════════════════════════════════════════════════

@@ -301,49 +301,61 @@
             </div>
           </div>
         </div>
-        <!-- Mode selector -->
-        <div class="furnace-mode-row">
-          <label class="mode-opt">
-            <input type="radio" name="fmode" value="0" checked onchange="setFurnaceMode(0)" /> <span>Manual</span>
-          </label>
-          <label class="mode-opt">
-            <input type="radio" name="fmode" value="1" onchange="setFurnaceMode(1)" /> <span>Auto — Program</span>
-          </label>
-          <span id="prog-no-wrap" style="display:none">
-            <select id="furnace-preset-select" class="sp-input preset-select" onchange="applyPreset(this.value)"
-              title="Named program presets">
-              {% for p in furnace_presets %}
-              <option value="{{ p.prog_no if p.prog_no is not none else '' }}">{{ p.name }}</option>
-              {% endfor %}
-            </select>
-            <input type="number" id="furnace-prog-no" class="sp-input" min="1" max="{{ furnace_num_programs }}"
-              value="1" style="width:56px" />
-            <button class="btn btn-xs" onclick="hpLoad()">Load</button>
-            <button class="btn btn-xs" onclick="openProgModal()">Edit</button>
-          </span>
+        <!-- Mode Tabs -->
+        <div class="furnace-tab-header">
+          <div class="f-tab active" id="tab-btn-manual" onclick="setFurnaceTab(0)">Manual Mode</div>
+          <div class="f-tab" id="tab-btn-prog" onclick="setFurnaceTab(1)">Heating Program</div>
         </div>
-        <!-- Manual controls -->
-        <div id="manual-controls" class="furnace-ctrl-block">
-          <div class="ctrl-row">
-            <span class="ctrl-lbl">Power&nbsp;%</span>
-            <input type="range" class="ctrl-slider" id="pwr-slider" min="0" max="100" step="1" value="0"
-              oninput="syncManual()" />
-            <span class="ctrl-num mono" id="pwr-val">0</span>
+
+        <div class="furnace-body-content">
+          <!-- Manual controls -->
+          <div id="manual-controls" class="furnace-ctrl-block">
+            <div class="ctrl-row">
+              <span class="ctrl-lbl">Power&nbsp;%</span>
+              <input type="range" class="ctrl-slider" id="pwr-slider" min="0" max="100" step="1" value="0"
+                oninput="syncManual()" />
+              <span class="ctrl-num mono" id="pwr-val">0</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="ctrl-lbl">Current&nbsp;%</span>
+              <input type="range" class="ctrl-slider" id="cur-slider" min="0" max="100" step="1" value="0"
+                oninput="syncManual()" />
+              <span class="ctrl-num mono" id="cur-val">0</span>
+            </div>
+            <div class="ctrl-note">Manual power/current selection — Furnace regulates output directly.</div>
           </div>
-          <div class="ctrl-row">
-            <span class="ctrl-lbl">Current&nbsp;%</span>
-            <input type="range" class="ctrl-slider" id="cur-slider" min="0" max="100" step="1" value="0"
-              oninput="syncManual()" />
-            <span class="ctrl-num mono" id="cur-val">0</span>
+
+          <!-- Auto controls -->
+          <div id="auto-controls" class="furnace-ctrl-block" style="display:none">
+            <div class="furnace-auto-row centered">
+              <div class="lg-item centered">
+                <div class="lg-lbl">Select Heating Program</div>
+                <div class="prog-select-row">
+                  <input type="number" id="furnace-prog-no" class="furnace-input lg mono" min="1" max="100" value="1">
+                  <button class="btn btn-outline" onclick="hpLoad()" title="Sync parameters from ICC">Sync Load</button>
+                  <button class="btn btn-outline" onclick="openProgModal()" title="Edit program phases">Phase Editor</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="prog-summary" id="prog-summary">Ready to load program.</div>
+
+            <!-- Program Progress Panel -->
+            <div id="prog-progress-panel" class="prog-progress-panel" style="display:none">
+              <div class="pp-header">PROGRAM EXECUTION</div>
+              <div class="pp-row">
+                <span class="pp-lbl">CURRENT:</span>
+                <span class="pp-val mono" id="pp-curr">—</span>
+              </div>
+              <div class="pp-row">
+                <span class="pp-lbl">NEXT:</span>
+                <span class="pp-val mono" id="pp-next">—</span>
+              </div>
+              <div class="pp-bar-bg">
+                <div id="pp-bar" class="pp-bar" style="width:0%"></div>
+              </div>
+            </div>
           </div>
-          <div class="ctrl-note">Temperature is measurement-only in manual mode — ICC sets power/current directly.</div>
-        </div>
-        <!-- Auto controls -->
-        <div id="auto-controls" class="furnace-ctrl-block" style="display:none">
-          <div class="prog-summary" id="prog-summary">No program loaded. Press <b>Load</b> to read from ICC.</div>
-          <button class="btn btn-start-prog" id="start-prog-btn" onclick="startProgram()">
-            ▶ Start Program <span id="start-prog-no">1</span>
-          </button>
         </div>
         <!-- Action bar -->
         <div class="furnace-action-bar">

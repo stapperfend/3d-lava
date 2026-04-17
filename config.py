@@ -63,7 +63,8 @@ FURNACE_PORT_SEND    = 5010    # Main control  telegrams  → ICC (section 9.1)
 FURNACE_PORT_RECV    = 5010    # Main status   telegrams ← ICC (section 9.2)
 FURNACE_SERVICE_PORT = 4660    # Service protocol: heating programs (section 9.4)
 FURNACE_CONSOLE_PORT = 4661    # Text console — send "HELLO" to activate
-FURNACE_TIMEOUT      = 0.05    # Prevent Python from stalling and missing the hardware 500ms keep-alive
+FURNACE_TIMEOUT         = 0.05    # Prevent Python from stalling and missing the hardware 500ms keep-alive
+FURNACE_SERVICE_TIMEOUT = 1.0     # More relaxed timeout for retrieval of programs/diagnostics
 
 # Furnace setpoint limits (safety clamp)
 FURNACE_MIN_SP = 0.0
@@ -100,4 +101,9 @@ CAMERAS = {
 FLASK_HOST  = "0.0.0.0"
 FLASK_PORT  = 5000
 FLASK_DEBUG = True
-STATUS_POLL_INTERVAL_MS = 500   # ms — reduced to 500 ms for smoother live data
+STATUS_POLL_INTERVAL_MS = 200   # default interval
+
+# Parallel refresh intervals (for the decoupling broadcaster)
+CRIO_UPDATE_MS      = 250   # 4Hz
+DUET_UPDATE_MS      = 500   # 2Hz
+FURNACE_UPDATE_MS   = 100   # 10Hz (Safety critical)

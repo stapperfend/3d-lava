@@ -1,3 +1,6 @@
+from gevent import monkey
+monkey.patch_all()
+
 """
 app.py — Flask Process Control Dashboard
 =========================================
@@ -136,12 +139,17 @@ def api_furnace_enable():
     data   = request.get_json(force=True)
     return jsonify(furnace.set_enable(bool(data.get("enable", False))))
 
+@app.route("/api/furnace/program/select", methods=["POST"])
+def api_furnace_program_select():
+    data    = request.get_json(force=True)
+    prog_no = int(data.get("prog_no", 0))
+    return jsonify(furnace.set_selected_program(prog_no))
+
 @app.route("/api/furnace/mode", methods=["POST"])
 def api_furnace_mode():
     data    = request.get_json(force=True)
-    mode    = int(data.get("mode", 0))         # 0=manual, 1=auto
-    prog_no = int(data.get("prog_no", 0))
-    return jsonify(furnace.set_mode(mode, prog_no))
+    mode    = int(data.get("mode", 0))
+    return jsonify(furnace.set_mode(mode))
 
 @app.route("/api/furnace/ack_error", methods=["POST"])
 def api_furnace_ack_error():
@@ -208,60 +216,99 @@ def stream_camera(cam_id):
 # ---------------------------------------------------------------------------
 # SocketIO — real-time status broadcaster
 # ---------------------------------------------------------------------------
-def _broadcast_loop():
-    interval = config.STATUS_POLL_INTERVAL_MS / 1000.0
+# ---------------------------------------------------------------------------
+# Parallel Broadcasters — Decoupled real-time status
+# ---------------------------------------------------------------------------
+
+_LATEST = {
+    "crio": {},
+    "duet": {},
+    "furnace": {},
+}
+_LATEST_LOCK = threading.Lock()
+
+def _update_latest(key, data):
+    with _LATEST_LOCK:
+        _LATEST[key] = data
+
+def _broadcaster_furnace():
+    interval = config.FURNACE_UPDATE_MS / 1000.0
     while True:
-        time.sleep(interval)
         try:
-            crio_st    = crio.get_all_status()
-            duet_st    = duet.get_status()
-            duet_st["process"] = duet.get_process_state()
-            furnace_st = furnace.get_status()
+            st = furnace.get_status()
+            _update_latest("furnace", st)
+            socketio.emit("status_update", {"furnace": st})
+        except Exception as e:
+            print(f"[broadcaster-furnace] {e}")
+        time.sleep(interval)
 
-            # ── Record to history ring buffer ─────────────────────
-            history.append({
-                "t":       time.time(),
-                "temp":    furnace_st.get("actual"),
-                "power":   furnace_st.get("actual_power"),
-                "current": furnace_st.get("actual_current"),
-                "freq":    furnace_st.get("actual_freq"),
-                "water":   furnace_st.get("water_flow"),
-                "energy":  furnace_st.get("actual_energy"),
-                "cap_v":   furnace_st.get("cap_voltage"),
-                "dc_v":    furnace_st.get("dc_voltage"),
-                "fsm":     furnace_st.get("fsm_state"),
-                "crio_temps": dict(crio_st.get("temperatures", {})),
-            })
-
-            # Derive traffic-light state from raw relay values
+def _broadcaster_crio():
+    interval = config.CRIO_UPDATE_MS / 1000.0
+    while True:
+        try:
+            st = crio.get_all_status()
+            _update_latest("crio", st)
+            
+            # Derive traffic-light state
             vr = config.TRAFFIC_RELAYS.get("vacuum_relay",  "relay_4")
             fr = config.TRAFFIC_RELAYS.get("furnace_relay", "relay_5")
-            vacuum_on  = bool(crio_st.get("relays", {}).get(vr, False))
-            furnace_on = bool(crio_st.get("relays", {}).get(fr, False))
-            if vacuum_on and furnace_on:
-                traffic = "red"
-            elif vacuum_on:
-                traffic = "yellow"
-            else:
-                traffic = "green"
-
+            v_on = bool(st.get("relays", {}).get(vr, False))
+            f_on = bool(st.get("relays", {}).get(fr, False))
+            traffic = "red" if (v_on and f_on) else ("yellow" if v_on else "green")
+            
             socketio.emit("status_update", {
-                "crio":    crio_st,
-                "duet":    duet_st,
-                "furnace": furnace_st,
-                "traffic": {"state": traffic, "vacuum": vacuum_on, "furnace": furnace_on},
+                "crio": st,
+                "traffic": {"state": traffic, "vacuum": v_on, "furnace": f_on}
             })
         except Exception as e:
-            print(f"[broadcaster] {e}")
+            print(f"[broadcaster-crio] {e}")
+        time.sleep(interval)
 
-@socketio.on("connect")
-def on_connect():
-    pass
+def _broadcaster_duet():
+    interval = config.DUET_UPDATE_MS / 1000.0
+    while True:
+        try:
+            st = duet.get_status()
+            st["process"] = duet.get_process_state()
+            _update_latest("duet", st)
+            socketio.emit("status_update", {"duet": st})
+        except Exception as e:
+            print(f"[broadcaster-duet] {e}")
+        time.sleep(interval)
+
+def _history_logger():
+    # Log to history at a stable 200ms
+    interval = 0.2
+    while True:
+        time.sleep(interval)
+        with _LATEST_LOCK:
+            furnace_st = _LATEST["furnace"]
+            crio_st    = _LATEST["crio"]
+            duet_st    = _LATEST["duet"]
+        
+        if not furnace_st: continue # Wait for first data
+        
+        history.append({
+            "t":       time.time(),
+            "temp":    furnace_st.get("actual"),
+            "power":   furnace_st.get("actual_power"),
+            "current": furnace_st.get("actual_current"),
+            "freq":    furnace_st.get("actual_freq"),
+            "water":   furnace_st.get("water_flow"),
+            "energy":  furnace_st.get("actual_energy"),
+            "cap_v":   furnace_st.get("cap_voltage"),
+            "dc_v":    furnace_st.get("dc_voltage"),
+            "fsm":     furnace_st.get("fsm_state"),
+            "crio_temps": dict(crio_st.get("temperatures", {})),
+        })
 
 # ---------------------------------------------------------------------------
-# Start background broadcaster
+# Start background broadcasters
 # ---------------------------------------------------------------------------
-threading.Thread(target=_broadcast_loop, daemon=True).start()
+threading.Thread(target=_broadcaster_furnace, daemon=True).start()
+threading.Thread(target=_broadcaster_crio,    daemon=True).start()
+threading.Thread(target=_broadcaster_duet,    daemon=True).start()
+threading.Thread(target=_history_logger,      daemon=True).start()
 
 # ---------------------------------------------------------------------------
 # Entry point

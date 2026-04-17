@@ -48,10 +48,12 @@ SBIT_ESTOP     = 1 << 8
 SBIT_HEARTBEAT = 1 << 15
 
 FSM_STATES = {
+    0: "Reserved [NONE]", 1: "Reserved [_ANY]",
     2: "Init", 3: "InitNetwork", 4: "StartNetServices",
-    5: "WaitForBusMaster", 6: "PrepareSupplies", 7: "PrepareGateDrivers",
-    8: "WaitForDCLink", 9: "Ready", 10: "Active",
-    11: "Error", 12: "NetworkError", 14: "UnrecoverableError",
+    5: "WaitForBusMaster", 6: "PrepareOnBoardSupplies", 7: "PrepareGateDrivers",
+    8: "WaitForDCLinkCharged", 9: "Ready", 10: "Active",
+    11: "Error", 12: "NetworkError", 13: "UnrecoverableError",
+    14: "Interlock",
 }
 
 # All 32 error bits from section 9.2.15
@@ -90,10 +92,26 @@ ERROR_BIT_NAMES = [
     "Undefined error in program/communication",
 ]
 
+# Process status bits (9.2.2)
+REGULATION_MODES = {
+    0: "Controller inactive / Power output disabled",
+    1: "Current limitation",
+    2: "Power limitation",
+    3: "Voltage limitation (U_Cap)",
+    4: "Phase angle limitation φ",
+    5: "Switching loss limitation PV",
+    6: "Frequency limitation",
+}
+
+CTRL_STATUS_BITS = [
+    (4, "Minimum limit violation (H-Prog)"),
+    (5, "Maximum limit violation (H-Prog)"),
+]
+
 # Heating phase struct (40 bytes each, section 9.6)
-# Format: B B B B I I I I I I I I I I  (little-endian)
+# Format: B B B B I I I I I I I I I I  (Big-Endian)
 # Fields: Mode Forwarding CtrlMode Status Current Power Time EnergySetpoint EnergyMin EnergyMax TempSetpoint TempMin TempMax _pad
-PHASE_STRUCT = "<BBBBI IIII II II"
+PHASE_STRUCT = ">BBBBI IIII II II"
 PHASE_SIZE   = 40
 
 def _default_phase(phase_idx=0):
@@ -143,15 +161,18 @@ _lock = threading.Lock()
 _ctrl = {
     "heating_on":   False,
     "ctrl_mode":    0,      # 0=manual, 1=auto
-    "temp_source":  0,      # bits 2-3: 0=off, 1=thermocouple, 2=pyrometer, 3=both
+    "temp_source": 0,      # bits 2-3: 0=off, 1=thermocouple, 2=pyrometer, 3=both
     "reset_energy": False,
     "ack_error":    False,
     "heartbeat":    False,
     "current_sp":   0.0,    # % of max
     "power_sp":     0.0,    # % of max
     "heatprog_no":  0,
-    "setpoint_c":   0.0,    # °C — for mock sim + display
 }
+
+# Completion tracking
+_last_prog_done = False
+_ctrl["setpoint_c"] = 0.0    # °C — for mock sim + display
 
 _status = {
     "ready":          False,
@@ -270,7 +291,7 @@ def _parse_input_packet(data: bytes) -> dict | None:
         p_energies = list(struct.unpack_from(">8I", data, 62))
         p_temps    = list(struct.unpack_from(">8f", data, 94))
         
-        return {
+        res = {
             "ready":          bool(sw_inverter & SBIT_READY),
             "active":         bool(sw_inverter & SBIT_ACTIVE),
             "error":          bool(sw_inverter & SBIT_ERROR),
@@ -301,6 +322,20 @@ def _parse_input_packet(data: bytes) -> dict | None:
             "status_fsm_raw": fsm_raw,
             "last_error_msg": None,
         }
+
+        # --- AUTO-DISABLE ON COMPLETION ---
+        global _last_prog_done
+        current_done = bool(sw_inverter & SBIT_PROG_DONE)
+        if current_done and not _last_prog_done:
+            # Transition to FINISHED detected
+            with _lock:
+                if _ctrl["ctrl_mode"] == 1:
+                    _ctrl["heating_on"] = False
+                    _ctrl["ctrl_mode"]  = 0
+        _last_prog_done = current_done
+        # ----------------------------------
+
+        return res
     except Exception as e:
         with _lock:
             _status["last_error_msg"] = f"Parse error: {e}"
@@ -316,7 +351,7 @@ _PROG_SUFFIX  = b"END_HEATPROG"   # 12 bytes, no null
 def _build_set_heatprog(prog_no: int, phases: list[dict]) -> bytes:
     """Build a SET_HEATPROG service telegram (347 bytes)."""
     pkt  = _SET_PREAMBLE
-    pkt += struct.pack("<H", prog_no)
+    pkt += struct.pack(">H", prog_no)
     for ph in phases:
         pkt += _pack_phase(ph)
     pkt += _PROG_SUFFIX
@@ -324,12 +359,18 @@ def _build_set_heatprog(prog_no: int, phases: list[dict]) -> bytes:
 
 def _build_get_heatprog(prog_no: int) -> bytes:
     """Build a GET_HEATPROG request telegram (26 bytes)."""
-    return _GET_PREAMBLE + struct.pack("<H", prog_no) + _PROG_SUFFIX
+    return _GET_PREAMBLE + struct.pack(">H", prog_no) + _PROG_SUFFIX
 
 def _parse_heatprog_response(data: bytes) -> list[dict] | None:
-    if len(data) < 347:
+    # Manual: Preamble(12) + Num(2) + 8*Phase(40) + Suffix(12) = 346 bytes
+    if len(data) < 346:
+        print(f"[furnace service] Malformed packet: received {len(data)} bytes, expected 346. (Data start: {data[:12].hex()})")
         return None
-    # preamble (12) + prog_no (2) + 8×phase (320) + suffix (12) = 346 bytes, 0-indexed last = 345
+    
+    if data[:12] != _GET_PREAMBLE:
+        print(f"[furnace service] Malformed packet: bad preamble '{data[:12].decode('ascii', errors='replace')}'")
+        return None
+
     phases = []
     offset = 14   # skip 12-byte preamble + 2-byte prog_no
     for _ in range(config.FURNACE_NUM_PHASES):
@@ -340,11 +381,26 @@ def _parse_heatprog_response(data: bytes) -> list[dict] | None:
 def _service_send_recv(pkt: bytes) -> bytes | None:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(config.FURNACE_TIMEOUT)
+        # Use a more relaxed timeout for the service protocol
+        timeout = getattr(config, "FURNACE_SERVICE_TIMEOUT", 2.0)
+        sock.settimeout(timeout)
+        
+        # Bind to physical interface if specified
+        host_ip = getattr(config, "HOST_IP", "")
+        if host_ip:
+            try:
+                sock.bind((host_ip, 0)) # Port 0 = OS picks a free port
+            except Exception as e:
+                print(f"[furnace service] Warning: Could not bind to {host_ip}: {e}")
+        
         sock.sendto(pkt, (config.FURNACE_IP, config.FURNACE_SERVICE_PORT))
-        data, _ = sock.recvfrom(512)
+        data, _ = sock.recvfrom(4096)
         return data
-    except Exception:
+    except socket.timeout:
+        # Don't print full stack trace for a timeout
+        return None
+    except Exception as e:
+        print(f"[furnace service] Communication error: {e}")
         return None
     finally:
         sock.close()
@@ -547,15 +603,36 @@ def set_setpoint(setpoint: float) -> dict:
     return {"ok": True, "error": None}
 
 def set_enable(enable: bool) -> dict:
+    """
+    Toggle heating on/off.
+    SMART: if a program > 0 is selected, automatically switch to AUTO mode.
+    """
     with _lock:
-        _ctrl["heating_on"] = bool(enable)
+        e = bool(enable)
+        _ctrl["heating_on"] = e
+        if e:
+            # If we are in AUTO mode (Tab 1), ensure we have a program
+            if _ctrl["ctrl_mode"] == 1:
+                if _ctrl["heatprog_no"] == 0:
+                    # Fallback to manual if no program selected
+                    _ctrl["ctrl_mode"] = 0
+            # If we are in MANUAL mode (Tab 0), ensure it stays manual
+            else:
+                _ctrl["ctrl_mode"] = 0
     return {"ok": True, "error": None}
 
 def set_mode(mode: int, prog_no: int = 0) -> dict:
-    """Set ICC operating mode: 0=manual, 1=auto (heating program)."""
+    """
+    Set ICC operating mode: 0=manual, 1=auto (heating program).
+    STRICT: if switching to manual, ensure we don't accidentally run a program.
+    """
     with _lock:
-        _ctrl["ctrl_mode"]   = int(mode)
-        _ctrl["heatprog_no"] = int(prog_no)
+        m = int(mode)
+        _ctrl["ctrl_mode"] = m
+        if prog_no > 0:
+            _ctrl["heatprog_no"] = int(prog_no)
+        # Note: we do NOT reset heatprog_no to 0 here because the user wants to see it,
+        # but the ICC will ignore it because ctrl_mode is 0.
     return {"ok": True, "error": None}
 
 def set_manual_control(power_pct: float, current_pct: float) -> dict:
@@ -571,12 +648,13 @@ def set_manual_control(power_pct: float, current_pct: float) -> dict:
         _ctrl["current_sp"]  = max(0.0, min(100.0, float(current_pct)))
     return {"ok": True, "error": None}
 
-def start_program(prog_no: int) -> dict:
-    """Switch to auto mode with the given program number and enable heating."""
+def set_selected_program(prog_no: int) -> dict:
+    """Set the target program number without starting it yet."""
     with _lock:
-        _ctrl["ctrl_mode"]   = 1
         _ctrl["heatprog_no"] = int(prog_no)
-        _ctrl["heating_on"]  = True
+        # If set to 0, ensure we are in manual mode
+        if _ctrl["heatprog_no"] == 0:
+            _ctrl["ctrl_mode"] = 0
     return {"ok": True, "error": None}
 
 def acknowledge_error() -> dict:
@@ -785,6 +863,17 @@ def get_raw_packets() -> dict:
     if sw & SBIT_HEARTBEAT: sw_parts.append("HEARTBEAT")
     sw_decoded = " | ".join(sw_parts) if sw_parts else "—"
 
+    # Controller Status (9.2.2)
+    reg_mode = proc_st & 0x0F
+    reg_name = REGULATION_MODES.get(reg_mode, f"Reserved ({reg_mode})")
+    ctrl_flags = [f["name"] for f in _bits_info(proc_st, CTRL_STATUS_BITS) if f["value"]]
+    ctrl_decoded = reg_name + (" | " + " | ".join(ctrl_flags) if ctrl_flags else "")
+
+    fsm_flags = [
+        {"bit": s_val, "name": s_name, "value": (fsm == s_val)}
+        for s_val, s_name in sorted(FSM_STATES.items())
+    ]
+
     fsm_name = FSM_STATES.get(fsm, f"State{fsm}")
     err_bits_active = [
         {"bit": b, "name": ERROR_BIT_NAMES[b], "value": True}
@@ -803,7 +892,7 @@ def get_raw_packets() -> dict:
     rx_fields = [
         {"name": "Prefix", "offset": 0, "length": 8, "fmt": "ASCII", "raw_hex": _hex(rx, 0, 8), "decoded": rx[0:8].decode("ascii", errors="replace")},
         {"name": "StatusWord_Inverter", "offset": 8, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 8, 2), "decoded": sw_decoded, "bits": _bits_info(sw, _STATUS_BITS)},
-        {"name": "StatusWord_Controller", "offset": 10, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 10, 2), "decoded": str(proc_st)},
+        {"name": "StatusWord_Controller", "offset": 10, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 10, 2), "decoded": ctrl_decoded, "bits": _bits_info(proc_st, CTRL_STATUS_BITS)},
         {"name": "PrimaryCurrent (A)", "offset": 12, "length": 4, "fmt": "float32-BE", "raw_hex": _hex(rx, 12, 4), "decoded": f"{i_act:.3f} A"},
         {"name": "PhaseAngle (°)", "offset": 16, "length": 4, "fmt": "float32-BE", "raw_hex": _hex(rx, 16, 4), "decoded": f"{phase_ang:.1f} °"},
         {"name": "Frequency (Hz)", "offset": 20, "length": 4, "fmt": "float32-BE", "raw_hex": _hex(rx, 20, 4), "decoded": f"{freq:.0f} Hz"},
@@ -815,7 +904,7 @@ def get_raw_packets() -> dict:
         {"name": "Temperature (°C)", "offset": 44, "length": 4, "fmt": "float32-BE", "raw_hex": _hex(rx, 44, 4), "decoded": f"{temp:.1f} °C"},
         {"name": "Active_HeatingProgram", "offset": 48, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 48, 2), "decoded": str(prog_no)},
         {"name": "Active_HeatingPhase", "offset": 50, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 50, 2), "decoded": str(prog_phase)},
-        {"name": "Status_FSM", "offset": 52, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 52, 2), "decoded": f"{FSM_STATES.get(fsm, f'State{fsm}')} (raw {fsm})"},
+        {"name": "Status_FSM", "offset": 52, "length": 2, "fmt": "uint16-BE", "raw_hex": _hex(rx, 52, 2), "decoded": f"{fsm_name} (raw {fsm})", "bits": fsm_flags},
         {"name": "ErrorWord_System", "offset": 54, "length": 4, "fmt": "uint32-BE", "raw_hex": _hex(rx, 54, 4), "decoded": f"0x{err_w:08X}", "bits": err_bits_all},
         {"name": "ErrorWord_HeatingProgram", "offset": 58, "length": 4, "fmt": "uint32-BE", "raw_hex": _hex(rx, 58, 4), "decoded": f"0x{struct.unpack_from('>I', rx, 58)[0]:08X}"},
         {"name": "EnergyCounters_Phases", "offset": 62, "length": 32, "fmt": "8xDWORD", "raw_hex": _hex(rx, 62, 32), "decoded": f"{e_p}"},
