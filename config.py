@@ -13,8 +13,8 @@ MOCK = False
 # NI cRIO
 # The cRIO must run a LabVIEW RT TCP server — see docs/crio_protocol.md
 # ---------------------------------------------------------------------------
-CRIO_IP      = "192.168.1.10"
-CRIO_PORT    = 5010
+CRIO_IP      = "192.168.137.109"
+CRIO_PORT    = 5020
 CRIO_TIMEOUT = 2.0
 
 # Relay channel definitions  {display_name: cRIO_channel_id}
@@ -33,18 +33,20 @@ TEMP_CHANNELS = {
     "Temp 2": "temp_1",
     "Temp 3": "temp_2",
     "Temp 4": "temp_3",
+    "Pyrometer": "temp_pyro",
 }
 
 # ---------------------------------------------------------------------------
-# Traffic-light process indicators (read-only — driven by cRIO, not the user)
-# Three visual states based on Vacuum + Furnace relay combination:
-#   Green  = Vacuum OFF, Furnace OFF  → STANDBY
-#   Yellow = Vacuum ON,  Furnace OFF  → VACUUM ACTIVE
-#   Red    = Vacuum ON,  Furnace ON   → PROCESS ACTIVE
+# Traffic-light process indicators
+# Dedicated relays for a signal tower:
+#   Relay 1 (relay_0) -> RED
+#   Relay 2 (relay_1) -> YELLOW
+#   Relay 3 (relay_2) -> GREEN
 # ---------------------------------------------------------------------------
 TRAFFIC_RELAYS = {
-    "vacuum_relay":  "relay_4",   # <-- set to the actual cRIO relay channel ID
-    "furnace_relay": "relay_5",   # <-- set to the actual cRIO relay channel ID
+    "red":    "relay_0",
+    "yellow": "relay_1",
+    "green":  "relay_2",
 }
 
 # ---------------------------------------------------------------------------
@@ -57,8 +59,8 @@ DUET_TIMEOUT = 5.0
 # Induction Furnace (UDP) — COBES i-class compact
 # Protocol: "800 0031.02_BA_EN_Bedienungsanleitung i-class compact.pdf"
 # ---------------------------------------------------------------------------
-FURNACE_IP           = "192.168.1.191"
-HOST_IP              = "192.168.1.192" # Force UDP to use the physical Ethernet adapter
+FURNACE_IP           = "192.168.137.191"
+HOST_IP              = "192.168.137.1" # Force UDP to use the physical Ethernet adapter
 FURNACE_PORT_SEND    = 5010    # Main control  telegrams  → ICC (section 9.1)
 FURNACE_PORT_RECV    = 5010    # Main status   telegrams ← ICC (section 9.2)
 FURNACE_SERVICE_PORT = 4660    # Service protocol: heating programs (section 9.4)

@@ -48,38 +48,103 @@
     <!-- ─── COL 1 TOP: NI cRIO ─── -->
     <section class="card" id="crio-panel">
       <div class="card-header">
-        <span class="card-icon">⚡</span>
-        <h2>NI cRIO</h2>
-        <span class="card-subtitle mono">{{ crio_ip }}</span>
-        <span class="conn-badge" id="crio-status-badge">–</span>
+        <div style="display:flex; align-items:center; gap:10px">
+          <span class="card-icon">⚡️</span>
+          <div>
+            <h2 style="margin:0">NI cRIO Controller</h2>
+            <span class="card-subtitle mono" style="font-size:10px; opacity:0.7">IP: {{ crio_ip }}</span>
+          </div>
+        </div>
+        <div class="header-actions">
+           <span class="conn-badge" id="crio-status-badge">–</span>
+           <button class="btn btn-xs" onclick="fetchCrioRawData()">🔬 Inspector</button>
+           <button class="btn btn-xs" onclick="openErrModal()">⚠️ Errors</button>
+           <button class="btn btn-xs" disabled>📦 Programs</button>
+        </div>
       </div>
       <div class="card-body">
-        <div class="section-label">Relay Channels</div>
-        <div class="relay-grid">
-          {% for name, ch_id in relay_channels.items() %}
-          {% set is_traffic = ch_id in traffic_relays.values() %}
-          <div class="relay-item {% if is_traffic %}relay-passive{% endif %}" id="relay-{{ ch_id }}">
-            {% if is_traffic %}
-            <span class="relay-indicator" id="ind-{{ ch_id }}">◉</span>
-            {% else %}
-            <label class="toggle-switch">
-              <input type="checkbox" class="relay-cb" data-channel="{{ ch_id }}"
-                onchange="toggleRelay('{{ ch_id }}', this.checked)" />
-              <span class="toggle-slider"></span>
-            </label>
-            {% endif %}
-            <span class="relay-label">{{ name }}</span>
-            {% if ch_id == traffic_relays.vacuum_relay %}
-            <span class="role-badge">Vac</span>
-            {% elif ch_id == traffic_relays.furnace_relay %}
-            <span class="role-badge">Furn</span>
-            {% endif %}
+        <div class="section-label">Device Status & Control</div>
+        
+        <div class="crio-flex-row">
+          <!-- Traffic Light (Vertical) -->
+          <div class="traffic-light-vertical">
+            <!-- Relay 1: RED -->
+            <div class="relay-item-tl relay-red" id="relay-{{ traffic_relays.red }}">
+              <label class="toggle-switch">
+                <input type="checkbox" class="relay-cb" data-channel="{{ traffic_relays.red }}"
+                  onchange="toggleRelay('{{ traffic_relays.red }}', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="relay-label">Red (Relay 1)</span>
+            </div>
+            
+            <!-- Relay 2: YELLOW -->
+            <div class="relay-item-tl relay-yellow" id="relay-{{ traffic_relays.yellow }}">
+              <label class="toggle-switch">
+                <input type="checkbox" class="relay-cb" data-channel="{{ traffic_relays.yellow }}"
+                  onchange="toggleRelay('{{ traffic_relays.yellow }}', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="relay-label">Yellow (Relay 2)</span>
+            </div>
+
+            <!-- Relay 3: GREEN -->
+            <div class="relay-item-tl relay-green" id="relay-{{ traffic_relays.green }}">
+              <label class="toggle-switch">
+                <input type="checkbox" class="relay-cb" data-channel="{{ traffic_relays.green }}"
+                  onchange="toggleRelay('{{ traffic_relays.green }}', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="relay-label">Green (Relay 3)</span>
+            </div>
           </div>
-          {% endfor %}
+
+          <!-- Other Relays in separate grid -->
+          <div class="relay-grid">
+            {% for name, ch_id in relay_channels.items() %}
+            {# Skip Relay 1, 2, 3 as they are now in the traffic light #}
+            {% if ch_id not in traffic_relays.values() %}
+            <div class="relay-item" id="relay-{{ ch_id }}">
+              <label class="toggle-switch">
+                <input type="checkbox" class="relay-cb" data-channel="{{ ch_id }}"
+                  onchange="toggleRelay('{{ ch_id }}', this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="relay-label">{{ name }}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
         </div>
-        <div class="section-label" style="margin-top:10px">Temperature Channels</div>
+
+        <div class="section-label" style="margin-top:15px">Pyrometer Interface</div>
+        <div class="pyro-control-box">
+          <div class="pyro-header">
+            <span class="pyro-title">Optical Pyrometer</span>
+            <span class="badge badge-mock" id="pyro-status-badge">ACTIVE</span>
+          </div>
+          <div class="pyro-main" style="position:relative">
+            <div class="pyro-error" id="pyro-error-msg" style="border-radius:var(--rs)">OFFLINE</div>
+            <div class="pyro-value mono" id="tempval-temp_pyro">—</div>
+            <div class="pyro-unit">°C</div>
+          </div>
+          <div class="emissivity-row">
+            <span class="tiny-label">Emissivity</span>
+            <input type="range" class="ctrl-slider" id="emissivity-slider" min="20" max="100" step="1" value="85"
+              oninput="el('emissivity-val').textContent = this.value + '%'"
+              onchange="setEmissivity(this.value)" />
+            <span class="ctrl-num mono" id="emissivity-val" style="min-width:40px">85%</span>
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:15px; display:flex; justify-content:space-between; align-items:center;">
+          <span>Analog Sensors</span>
+          <button class="btn btn-xs" onclick="fetchCrioRawData()">RAW DATA</button>
+        </div>
         <div class="temp-grid">
           {% for name, ch_id in temp_channels.items() %}
+          {# Skip Pyrometer here as it has its own box #}
+          {% if ch_id != 'temp_pyro' %}
           <div class="temp-card">
             <div class="temp-value mono" id="tempval-{{ ch_id }}">—</div>
             <div class="temp-unit">°C</div>
@@ -88,6 +153,7 @@
               <div class="temp-bar-fill" id="tempbar-{{ ch_id }}"></div>
             </div>
           </div>
+          {% endif %}
           {% endfor %}
         </div>
       </div>
@@ -529,7 +595,32 @@
     </div><!-- .modal -->
   </div><!-- #proto-modal -->
 
-  <!-- ══════════════ JS ══════════════ -->
+  <!-- ══════════════ Modal: cRIO JSON Protocol Inspector ══════════════ -->
+  <div class="modal-overlay" id="crio-proto-modal" style="display:none">
+    <div class="modal proto-modal-alt">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="card-icon">🔍</span>
+          <span id="crio-proto-title">cRIO JSON Inspector</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-xs" onclick="fetchCrioRawData()">↺ Refresh</button>
+          <button class="btn btn-xs" onclick="el('crio-proto-modal').style.display='none'">✕ Close</button>
+        </div>
+      </div>
+      <div class="proto-body">
+        <div class="proto-panel">
+          <div class="proto-panel-title">📤 LAST REQUEST (JSON)</div>
+          <div class="hex-dump json-box" id="crio-tx-dump"></div>
+        </div>
+        <div class="proto-panel">
+          <div class="proto-panel-title">📥 LAST RESPONSE (JSON)</div>
+          <div class="hex-dump json-box" id="crio-rx-dump"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="/static/app.js"></script>
   <script>
@@ -541,6 +632,7 @@
       numPhases: {{ furnace_num_phases }},
       trafficRelays: {{ traffic_relays | tojson }},
       furnacePresets: {{ furnace_presets | tojson }},
+      crioIp: "{{ crio_ip }}",
     };
   </script>
 </body>

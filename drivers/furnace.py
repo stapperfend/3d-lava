@@ -161,7 +161,7 @@ _lock = threading.Lock()
 _ctrl = {
     "heating_on":   False,
     "ctrl_mode":    0,      # 0=manual, 1=auto
-    "temp_source": 0,      # bits 2-3: 0=off, 1=thermocouple, 2=pyrometer, 3=both
+    "temp_source": 2,      # bits 2-3: 0=off, 1=thermocouple, 2=pyrometer, 3=both
     "reset_energy": False,
     "ack_error":    False,
     "heartbeat":    False,
@@ -473,9 +473,9 @@ def _real_io_loop():
             _last_tx_bytes = pkt
         try:
             sock.sendto(pkt, dest)
-            if hb != hb_last: # Print once per heartbeat toggle (every 1s)
-                cw_dbg = _build_ctrl_word(_ctrl, hb)
-                print(f"[furnace TX] CW=0x{cw_dbg:04X} SP_I={_ctrl['current_sp']}% SP_P={_ctrl['power_sp']}% HB={hb}")
+            # if hb != hb_last: # Print once per heartbeat toggle (every 1s)
+            #     cw_dbg = _build_ctrl_word(_ctrl, hb)
+            #     # print(f"[furnace TX] CW=0x{cw_dbg:04X} SP_I={_ctrl['current_sp']}% SP_P={_ctrl['power_sp']}% HB={hb}")
         except Exception as e:
             with _lock:
                 _status["error"] = f"TX error: {e}"
@@ -493,8 +493,8 @@ def _real_io_loop():
             if parsed:
                 with _lock:
                     _status.update(parsed)
-                    if hb != hb_last:
-                        print(f"[furnace RX] FSM={_status['fsm_state']} (raw {parsed.get('status_fsm_raw')}) DC={_status['dc_voltage']}V")
+                    # if hb != hb_last:
+                    #     # print(f"[furnace RX] FSM={_status['fsm_state']} (raw {parsed.get('status_fsm_raw')}) DC={_status['dc_voltage']}V")
         except socket.timeout:
             with _lock:
                 _status["error"] = f"No response from ICC at {config.FURNACE_IP}"

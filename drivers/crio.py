@@ -26,10 +26,23 @@ import config
 # ---------------------------------------------------------------------------
 
 _lock = threading.Lock()   # Serialize TCP access across Flask threads
+_last_temp_print_time = 0.0
+
+# Protocol Inspector state
+_last_raw = {
+    "tx": None,
+    "rx": None,
+    "time": 0
+}
 
 def _send_command(cmd: dict) -> dict:
     """Send a JSON command to the cRIO and return the JSON response."""
-    payload = (json.dumps(cmd) + "\n").encode("utf-8")
+    payload_str = json.dumps(cmd) + "\n"
+    payload = payload_str.encode("utf-8")
+    
+    _last_raw["tx"] = payload_str.strip()
+    _last_raw["time"] = time.time()
+
     with _lock:
         with socket.create_connection(
             (config.CRIO_IP, config.CRIO_PORT),
@@ -43,7 +56,15 @@ def _send_command(cmd: dict) -> dict:
                 if not chunk:
                     break
                 buf += chunk
-    return json.loads(buf.decode("utf-8").strip())
+    
+    resp_str = buf.decode("utf-8").strip()
+    _last_raw["rx"] = resp_str
+    
+    return json.loads(resp_str)
+
+def get_raw_data() -> dict:
+    """Return the last TX and RX JSON strings for the protocol inspector."""
+    return _last_raw
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +77,7 @@ _mock_temps: dict[str, float] = {
     "temp_1":  60.1,
     "temp_2":  35.7,
     "temp_3":  22.4,
+    "temp_pyro": -1.0,  # Starts in warming phase
 }
 
 def _mock_noise(value: float, sigma: float = 0.3) -> float:
@@ -83,7 +105,37 @@ def get_all_status() -> dict:
         }
     try:
         resp = _send_command({"action": "get_all"})
-        return {"relays": resp["relays"], "temperatures": resp["temperatures"], "error": None}
+        
+        # REMAPPING: The cRIO returns nested data, we need to flatten it for the dashboard
+        raw_temps = resp.get("temperatures", {})
+        tc_array = raw_temps.get("tc", [])
+        
+        # Priority for pyrometer: pyro_digital (new) then temp_pyro (old/fallback)
+        # If neither exists, we return None to indicate missing data
+        pyro_val = raw_temps.get("pyro_digital")
+        if pyro_val is None:
+            pyro_val = raw_temps.get("temp_pyro")
+
+        mapped_temps = {
+            "temp_0": tc_array[0] if len(tc_array) > 0 else 0.0,
+            "temp_1": tc_array[1] if len(tc_array) > 1 else 0.0,
+            "temp_2": tc_array[2] if len(tc_array) > 2 else 0.0,
+            "temp_3": tc_array[3] if len(tc_array) > 3 else 0.0,
+            "temp_pyro": pyro_val, 
+        }
+        
+        # Throttled printout for pyrometer temperature (every 5 seconds)
+        global _last_temp_print_time
+        now = time.time()
+        if now - _last_temp_print_time > 5.0:
+            pyro_display = "N/A" if pyro_val is None else pyro_val
+            print(f"[CRIO] Incoming Temp — Pyrometer: {pyro_display} °C")
+            if pyro_val is None:
+                # Log raw keys to help debug why it's missing
+                print(f"[CRIO] DEBUG: temperatures keys found: {list(raw_temps.keys())}")
+            _last_temp_print_time = now
+            
+        return {"relays": resp["relays"], "temperatures": mapped_temps, "error": None}
     except Exception as e:
         return {"relays": {}, "temperatures": {}, "error": str(e)}
 
@@ -100,7 +152,10 @@ def set_relay(channel_id: str, state: bool) -> dict:
         return {"ok": False, "error": f"Unknown channel: {channel_id}"}
     try:
         resp = _send_command({"action": "set_relay", "channel": channel_id, "state": state})
-        return {"ok": resp.get("ok", False)}
+        return {
+            "ok": resp.get("ok", False),
+            "error": resp.get("error", "Unknown cRIO error") if not resp.get("ok") else None
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -116,6 +171,36 @@ def read_temperature(channel_id: str) -> dict:
         return {"value": None, "error": f"Unknown channel: {channel_id}"}
     try:
         resp = _send_command({"action": "read_temp", "channel": channel_id})
-        return {"value": resp.get("value"), "unit": "C"}
+        return {"value": resp.get("value"), "unit": "C", "error": resp.get("error")}
     except Exception as e:
         return {"value": None, "error": str(e)}
+
+
+def set_emissivity(value: int) -> dict:
+    """
+    Set the emissivity (20-100%).
+    Value '100' is sent as string '00', others as '20'-'99'.
+    """
+    if config.MOCK:
+        print(f"[MOCK] Setting emissivity to {value}%")
+        # In mock mode, if we set emissivity, let's "warm up" the pyrometer
+        if "temp_pyro" in _mock_temps:
+            _mock_temps["temp_pyro"] = 850.0
+        return {"ok": True}
+    
+    # Format value: 100 -> "00", else two-digit string
+    val_str = "00" if value >= 100 else f"{max(20, min(99, value)):02d}"
+    
+    try:
+        print(f"[CRIO] Sending Command — Emissivity: {value}% (LabVIEW hex/string: {val_str})")
+        resp = _send_command({"action": "set_emissivity", "value": val_str})
+        
+        # Flex check: LabVIEW might return ok:false but reply:"ok"
+        success = resp.get("ok", False) or resp.get("reply") == "ok"
+        
+        return {
+            "ok": success,
+            "error": resp.get("error", "Unknown cRIO error") if not success else None
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

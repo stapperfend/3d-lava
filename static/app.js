@@ -52,12 +52,24 @@ socket.on("status_update", data => {
 });
 
 // ── Traffic Light ────────────────────────────────────────────
-const TL_LABELS = { green: "STANDBY", yellow: "VACUUM ACTIVE", red: "PROCESS ACTIVE" };
-function updateTrafficLight({ state }) {
-  ["green", "yellow", "red"].forEach(c => el(`tl-${c}`).classList.toggle("active", c === state));
+function updateTrafficLight(data) {
+  // Update topbar widget
+  ["green", "yellow", "red"].forEach(c => {
+    el(`tl-${c}`)?.classList.toggle("active", !!data[c]);
+  });
+  
+  // Logic for the label (top bar) - show highest priority color
+  let activeLabel = "STANDBY";
+  let activeColor = "var(--muted)";
+  if (data.red) { activeLabel = "PROCESS ACTIVE"; activeColor = "var(--red)"; }
+  else if (data.yellow) { activeLabel = "VACUUM ACTIVE"; activeColor = "var(--yellow)"; }
+  else if (data.green) { activeLabel = "STANDBY"; activeColor = "var(--green)"; }
+  
   const lbl = el("tl-label");
-  lbl.textContent = TL_LABELS[state] || "—";
-  lbl.style.color = state === "green" ? "var(--green)" : state === "yellow" ? "var(--yellow)" : state === "red" ? "var(--red)" : "var(--muted)";
+  if (lbl) {
+    lbl.textContent = activeLabel;
+    lbl.style.color = activeColor;
+  }
 }
 
 function setFurnaceTab(mode) {
@@ -77,26 +89,58 @@ function updateCrioUI(data) {
   badge.textContent = window.PCFG.mockMode ? "MOCK" : (data.error ? "ERROR" : "OK");
   badge.className = "conn-badge " + (window.PCFG.mockMode ? "mock" : data.error ? "error" : "ok");
 
-  const trafficIds = Object.values(window.PCFG.trafficRelays || {});
   if (data.relays) {
     for (const [id, on] of Object.entries(data.relays)) {
-      if (trafficIds.includes(id)) {
-        el(`relay-${id}`)?.classList.toggle("on-indicator", on);
-        const ind = el(`ind-${id}`); if (ind) ind.style.color = on ? "var(--green)" : "var(--muted)";
-      } else {
-        const cb = document.querySelector(`.relay-cb[data-channel="${id}"]`);
-        const item = el(`relay-${id}`);
-        if (cb && !cb._pending) { cb.checked = on; item?.classList.toggle("active", on); }
+      const cb = document.querySelector(`.relay-cb[data-channel="${id}"]`);
+      const item = el(`relay-${id}`);
+      
+      // Sync logic: respect a 1-second "user intent" period after clicking
+      const now = Date.now();
+      const inCooldown = cb && cb._lastClick && (now - cb._lastClick < 1000);
+      
+      if (cb && !inCooldown) { 
+        cb.checked = on; 
+        item?.classList.toggle("active", on); 
       }
     }
   }
+  
   if (data.temperatures) {
+    const pyroVal = data.temperatures["temp_pyro"];
+    const pyroErr = el("pyro-error-msg");
+    const pyroBadge = el("pyro-status-badge");
+
+    // Check for "No data" - if key doesn't exist or is exactly null/undefined
+    const hasData = (pyroVal !== undefined && pyroVal !== null);
+    if (pyroErr) pyroErr.classList.toggle("active", !hasData);
+    if (pyroBadge) {
+        pyroBadge.textContent = hasData ? (pyroVal === -1.0 ? "WARMING" : "ACTIVE") : "OFFLINE";
+        pyroBadge.className = "badge " + (hasData ? (pyroVal === -1.0 ? "badge-mock" : "conn-badge ok") : "conn-badge error");
+    }
+
     for (const [id, val] of Object.entries(data.temperatures)) {
       const v = el(`tempval-${id}`); const b = el(`tempbar-${id}`);
-      if (v) v.textContent = fmt(val);
-      if (b) b.style.width = Math.min(100, Math.max(0, parseFloat(val) / 500 * 100)).toFixed(1) + "%";
+      if (v) {
+        if (id === "temp_pyro" && val === -1.0) {
+          v.textContent = "Warming...";
+          v.classList.add("warming-text");
+        } else {
+          v.textContent = fmt(val);
+          v.classList.remove("warming-text");
+        }
+      }
+      if (b) {
+        const barVal = (id === "temp_pyro" && val === -1.0) ? 0 : parseFloat(val);
+        const maxVal = id === "temp_pyro" ? 1600 : 500;
+        b.style.width = Math.min(100, Math.max(0, barVal / maxVal * 100)).toFixed(1) + "%";
+      }
     }
   }
+}
+
+async function setEmissivity(value) {
+  const d = await post("/api/crio/emissivity", { value: parseInt(value) });
+  if (!d.ok) appendLog(`✖ Emissivity failed: ${d.error}`, "log-error");
 }
 
 // ── Duet UI ─────────────────────────────────────────────────
@@ -275,11 +319,15 @@ function updateFurnaceUI(data) {
 // ── Relay toggle ────────────────────────────────────────────
 async function toggleRelay(channelId, newState) {
   const cb = document.querySelector(`.relay-cb[data-channel="${channelId}"]`);
-  if (cb) cb._pending = true;
+  if (cb) cb._lastClick = Date.now(); // Start cooldown
+  
   const d = await post(`/api/crio/relay/${channelId}`, { state: newState });
-  if (!d.ok && cb) cb.checked = !newState;
-  else { el(`relay-${channelId}`)?.classList.toggle("active", newState); }
-  if (cb) cb._pending = false;
+  if (!d.ok && cb) {
+      cb.checked = !newState;
+      cb._lastClick = 0; // Reset cooldown on error so status update can fix it
+  } else {
+      el(`relay-${channelId}`)?.classList.toggle("active", newState);
+  }
 }
 
 // ── GCode terminal ──────────────────────────────────────────
@@ -503,32 +551,54 @@ function openProtoModal() {
 function closeProtoModal() {
   el("proto-modal").style.display = "none";
   clearInterval(_protoTimer);
-  _protoTimer = null;
 }
-
-async function fetchRawPackets() {
-  try {
-    const data = await get("/api/furnace/raw_packets");
-    if (data.tx) renderPacket("tx", data.tx);
-    if (data.rx) renderPacket("rx", data.rx);
-    // Blink the live dot
-    const dot = el("proto-refresh-dot");
-    if (dot) { dot.style.opacity = "0.3"; setTimeout(() => { dot && (dot.style.opacity = "1"); }, 200); }
-  } catch (e) {
-    console.warn("Protocol inspector fetch failed:", e);
+// ── Protocol Inspectors ─────────────────────────────────
+  
+  async function fetchRawPackets() {
+    try {
+      const data = await get("/api/furnace/raw_packets");
+      if (data.tx) renderPacket("tx", data.tx);
+      if (data.rx) renderPacket("rx", data.rx);
+      const dot = el("proto-refresh-dot");
+      if (dot) { dot.style.opacity = "0.3"; setTimeout(() => { if(dot) dot.style.opacity = "1"; }, 200); }
+    } catch (e) { console.warn("Protocol inspector fetch failed:", e); }
   }
-}
 
-// Field palette — maps field index → CSS class
-const FC_PALETTE = [
-  "fc-0", "fc-1", "fc-2", "fc-3", "fc-4", "fc-5", "fc-6", "fc-7",
-  "fc-8", "fc-9", "fc-10", "fc-11", "fc-12", "fc-13", "fc-14", "fc-15", "fc-16", "fc-17"
-];
-// Colours matching .fc-N for the dot (use CSS custom-property-equivalent hex)
-const FC_DOT_COLORS = [
-  "#b8b0ff", "#93d9ff", "#86efb9", "#fdb87e", "#fd8fa9", "#fde88a", "#c4b5fd", "#7ee7d6",
-  "#f9a8d4", "#fde047", "#b3b5f8", "#6ee7b7", "#fca5a5", "#7dd3f5", "#fcd34d", "#d8b4fe", "#86efac", "#fca5a5"
-];
+  window.fetchCrioRawData = async function() {
+    try {
+      const modal = el("crio-proto-modal");
+      if (modal) modal.style.display = "flex";
+      const data = await get("/api/crio/raw_data");
+      
+      const txBox = el("crio-tx-dump");
+      const rxBox = el("crio-rx-dump");
+      if (txBox) {
+          const parsed = JSON.parse(data.tx || "{}");
+          txBox.innerHTML = `<pre style="color:var(--purple); font-size:11px; padding:10px;">${JSON.stringify(parsed, null, 2)}</pre>`;
+      }
+      if (rxBox) {
+          const parsed = JSON.parse(data.rx || "{}");
+          rxBox.innerHTML = `<pre style="color:var(--blue); font-size:11px; padding:10px;">${JSON.stringify(parsed, null, 2)}</pre>`;
+      }
+    } catch (e) { console.error("cRIO Inspector fetch failed:", e); }
+  }
+  
+  window.fetchRawPackets = fetchRawPackets;
+  window.openProtoModal = () => {
+    el("proto-modal").style.display = "flex";
+    el("proto-title-main").textContent = "Furnace Protocol Inspector (Binary)";
+    fetchRawPackets();
+  };
+
+  // Field palette — maps field index → CSS class
+  const FC_PALETTE = [
+    "fc-0", "fc-1", "fc-2", "fc-3", "fc-4", "fc-5", "fc-6", "fc-7",
+    "fc-8", "fc-9", "fc-10", "fc-11", "fc-12", "fc-13", "fc-14", "fc-15", "fc-16", "fc-17"
+  ];
+  const FC_DOT_COLORS = [
+    "#b8b0ff", "#93d9ff", "#86efb9", "#fdb87e", "#fd8fa9", "#fde88a", "#c4b5fd", "#7ee7d6",
+    "#f9a8d4", "#fde047", "#b3b5f8", "#6ee7b7", "#fca5a5", "#7dd3f5", "#fcd34d", "#d8b4fe", "#86efac", "#fca5a5"
+  ];
 
 function renderPacket(dir, pkt) {
   const dumpEl = el(`proto-${dir}-dump`);
@@ -677,6 +747,7 @@ const CHART_DATASETS = [
   { key: "crio_temp_1", label: "cRIO Temp 2 (°C)", color: "#fde68a", yAxis: "yL", hidden: true, dash: [5, 3] },
   { key: "crio_temp_2", label: "cRIO Temp 3 (°C)", color: "#86efac", yAxis: "yL", hidden: true, dash: [5, 3] },
   { key: "crio_temp_3", label: "cRIO Temp 4 (°C)", color: "#67e8f9", yAxis: "yL", hidden: true, dash: [5, 3] },
+  { key: "temp_pyro",   label: "Pyrometer (°C)",   color: "#f87171", yAxis: "yL", hidden: false, dash: [2, 2] },
 ];
 
 let _chart = null;
@@ -785,6 +856,9 @@ function _samplesToDatasets(samples) {
         // e.g. crio_temp_0 → look in crio_temps["temp_0"]
         const chanKey = "temp_" + d._key.split("_").pop();
         val = s.crio_temps?.[chanKey] ?? null;
+      } else if (d._key === "temp_pyro") {
+        val = s.crio_temps?.["temp_pyro"] ?? null;
+        if (val === -1.0) val = null; // Hide warming phase from chart
       } else {
         val = s[d._key] ?? null;
       }

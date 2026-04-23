@@ -7,7 +7,7 @@ This document defines the TCP communication protocol between the Python Flask se
 
 ## Connection Model
 
-- **Server**: LabVIEW RT VI on cRIO listens on **TCP port 5010** (configurable in `config.py`)
+- **Server**: LabVIEW RT VI on cRIO listens on **TCP port 5020** (configurable in `config.py`)
 - **Client**: Python driver (`drivers/crio.py`) connects, sends a command, reads the reply, and closes the connection
 - **Format**: Each message is a single **UTF-8 JSON string terminated by a newline character** (`\n`)
 - **One request → one response per connection** (simplest model; can be extended to persistent connection later)
@@ -70,7 +70,8 @@ Read all relay states and all temperature channels at once.
     "temp_0": 215.3,
     "temp_1": 60.1,
     "temp_2": 35.7,
-    "temp_3": 22.4
+    "temp_3": 22.4,
+    "temp_pyro": 850.0
   }
 }
 ```
@@ -107,6 +108,23 @@ Read a single temperature channel.
 {"ok": true, "value": 215.3}
 ```
 Value is in **°C**. If the channel does not exist or the measurement fails, return `{"ok": false, "error": "..."}`.
+Special case for `temp_pyro`: returns `-1.0` during warming/stabilization phase.
+
+---
+
+### 4. `set_emissivity`
+Set the emissivity of the pyrometer (Metis RS232).
+
+**Request:**
+```json
+{"action": "set_emissivity", "value": "85"}
+```
+- `value`: two-digit string ("20"..."99", or "00" for 100%)
+
+**Response:**
+```json
+{"ok": true}
+```
 
 ---
 
@@ -150,8 +168,8 @@ Run this on the host PC to test the cRIO VI independently of the Flask server:
 ```python
 import socket, json
 
-CRIO_IP   = "192.168.1.10"
-CRIO_PORT = 5010
+CRIO_IP   = "192.168.137.1"
+CRIO_PORT = 5020
 
 def send(cmd):
     payload = (json.dumps(cmd) + "\n").encode()

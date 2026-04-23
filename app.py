@@ -64,11 +64,21 @@ def index():
 def api_crio_status():
     return jsonify(crio.get_all_status())
 
+@app.route("/api/crio/raw_data")
+def api_crio_raw_data():
+    return jsonify(crio.get_raw_data())
+
 @app.route("/api/crio/relay/<channel_id>", methods=["POST"])
 def api_crio_relay(channel_id):
     data  = request.get_json(force=True)
     state = bool(data.get("state", False))
     return jsonify(crio.set_relay(channel_id, state))
+
+@app.route("/api/crio/emissivity", methods=["POST"])
+def api_crio_emissivity():
+    data  = request.get_json(force=True)
+    value = int(data.get("value", 85))
+    return jsonify(crio.set_emissivity(value))
 
 # ---------------------------------------------------------------------------
 # Routes — Duet 3 6HC — GCode terminal
@@ -249,16 +259,22 @@ def _broadcaster_crio():
             st = crio.get_all_status()
             _update_latest("crio", st)
             
-            # Derive traffic-light state
-            vr = config.TRAFFIC_RELAYS.get("vacuum_relay",  "relay_4")
-            fr = config.TRAFFIC_RELAYS.get("furnace_relay", "relay_5")
-            v_on = bool(st.get("relays", {}).get(vr, False))
-            f_on = bool(st.get("relays", {}).get(fr, False))
-            traffic = "red" if (v_on and f_on) else ("yellow" if v_on else "green")
+            # Derive traffic-light states
+            tr_red    = config.TRAFFIC_RELAYS["red"]
+            tr_yellow = config.TRAFFIC_RELAYS["yellow"]
+            tr_green  = config.TRAFFIC_RELAYS["green"]
+            
+            red_on    = bool(st.get("relays", {}).get(tr_red,    False))
+            yellow_on = bool(st.get("relays", {}).get(tr_yellow, False))
+            green_on  = bool(st.get("relays", {}).get(tr_green,  False))
             
             socketio.emit("status_update", {
                 "crio": st,
-                "traffic": {"state": traffic, "vacuum": v_on, "furnace": f_on}
+                "traffic": {
+                    "red": red_on, 
+                    "yellow": yellow_on, 
+                    "green": green_on
+                }
             })
         except Exception as e:
             print(f"[broadcaster-crio] {e}")

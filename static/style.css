@@ -265,10 +265,144 @@ body {
 }
 
 /* ── cRIO ─────────────────────────────────────────────────── */
+/* ── cRIO ─────────────────────────────────────────────────── */
+.crio-flex-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.traffic-light-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 140px; /* Fixed width to make them narrower */
+  flex-shrink: 0;
+}
+
+.relay-item-tl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--rs);
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: all 0.3s;
+  background: var(--surface2);
+}
+
+.relay-item-tl .relay-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 9px; /* Slightly smaller font */
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+/* Neutral (OFF) states for traffic light boxes */
+.relay-red    { background: rgba(244, 63, 94, 0.05); border-color: rgba(244, 63, 94, 0.2); }
+.relay-yellow { background: rgba(251, 191, 36, 0.05); border-color: rgba(251, 191, 36, 0.2); }
+.relay-green  { background: rgba(52, 211, 153, 0.05); border-color: rgba(52, 211, 153, 0.2); }
+
+/* Active (ON) states - solid and bright */
+.relay-red.active    { background: var(--red);    border-color: #ffadb9; box-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
+.relay-yellow.active { background: var(--yellow); border-color: #ffefc2; box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); }
+.relay-green.active  { background: var(--green);  border-color: #b3ffeb; box-shadow: 0 0 15px rgba(52, 211, 153, 0.4); }
+
+/* Label color changes when active */
+.relay-red.active    .relay-label { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.relay-yellow.active .relay-label { color: #000; text-shadow: 0 1px 2px rgba(255,255,255,0.2); }
+.relay-green.active  .relay-label { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+
+/* Ensure labels are visible in neutral state too */
+.relay-item-tl .relay-label {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  transition: color 0.3s;
+}
+
 .relay-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(1, 1fr);
   gap: 6px;
+  flex: 1;
+}
+
+.pyro-control-box {
+  background: var(--surface2);
+  border: 1px solid var(--purple-dim);
+  border-radius: var(--rs);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.pyro-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pyro-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--purple);
+  letter-spacing: 0.05em;
+}
+
+.pyro-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pyro-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--orange);
+  line-height: 1;
+}
+
+.pyro-unit {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.pyro-error {
+  position: absolute;
+  inset: 0;
+  background: rgba(244, 63, 94, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  z-index: 10;
+  backdrop-filter: blur(2px);
+  display: none; /* hidden by default */
+}
+
+.pyro-error.active {
+  display: flex;
+}
+
+.emissivity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface3);
+  padding: 6px 10px;
+  border-radius: var(--rs);
 }
 
 .relay-item {
@@ -1855,4 +1989,29 @@ code {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
+}
+
+/* ── Protocol Modal Alt (cRIO) ────────────────────────── */
+.proto-modal-alt {
+  width: 900px !important;
+  max-width: 95vw;
+}
+
+.json-box {
+  background: #090b10 !important;
+  border: 1px solid var(--border);
+  overflow: auto;
+  min-height: 200px;
+  max-height: 500px;
+}
+
+.json-box pre {
+  margin: 0;
+  font-family: var(--mono);
+}
+
+.header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
