@@ -17,7 +17,7 @@
 
 <body>
 
-  <!-- ══════════════════════ TOP BAR ══════════════════════ -->
+  <!-- ======================== TOP BAR ======================== -->
   <header class="topbar">
     <div class="topbar-left">
       <svg class="topbar-logo" viewBox="0 0 32 32" fill="none">
@@ -26,7 +26,6 @@
         <circle cx="16" cy="23" r="1.5" fill="#7c6af7" />
       </svg>
       <span class="topbar-title">Process Control</span>
-      {% if mock_mode %}<span class="badge badge-mock">MOCK MODE</span>{% endif %}
     </div>
     <div class="topbar-right">
       <div class="tl-widget" id="tl-widget">
@@ -41,68 +40,61 @@
     </div>
   </header>
 
-  <!-- ══════════════════════ MAIN GRID ════════════════════ -->
+  <!-- ======================== MAIN GRID ======================== -->
   <!-- 3 columns × 2 rows -->
   <main class="grid">
 
-    <!-- ─── COL 1 TOP: NI cRIO ─── -->
+    <!-- ——— COL 1 TOP: NI cRIO ——— -->
     <section class="card" id="crio-panel">
       <div class="card-header">
-        <div style="display:flex; align-items:center; gap:10px">
-          <span class="card-icon">⚡️</span>
-          <div>
-            <h2 style="margin:0">NI cRIO Controller</h2>
-            <span class="card-subtitle mono" style="font-size:10px; opacity:0.7">IP: {{ crio_ip }}</span>
+        <span class="card-icon">⚡️</span>
+        <div style="display:flex; flex-direction:column;">
+          <h2 style="margin:0">NI cRIO Controller</h2>
+          <div class="card-subtitle mono" style="font-size:10px; opacity:0.7;">
+            {{ crio_ip }} | TS: <span id="crio-ts">---</span> | SEQ: <span id="crio-seq">---</span>
           </div>
         </div>
-        <div class="header-actions">
-           <span class="conn-badge" id="crio-status-badge">–</span>
-           <button class="btn btn-xs" onclick="fetchCrioRawData()">🔬 Inspector</button>
-           <button class="btn btn-xs" onclick="openErrModal()">⚠️ Errors</button>
-           <button class="btn btn-xs" disabled>📦 Programs</button>
+        <div class="heartbeat-wrap" id="crio-hb">
+          <div class="hb-group"><span class="hb-label">TX</span><div class="hb-dot hb-tx"></div></div>
+          <div class="hb-group"><span class="hb-label">RX</span><div class="hb-dot hb-rx"></div></div>
         </div>
+        <span class="conn-badge" id="crio-status-badge">–</span>
+        <button class="btn btn-xs" onclick="openCrioInspector()">🔬 Inspector</button>
       </div>
       <div class="card-body">
-        <div class="section-label">Device Status & Control</div>
+        <div class="section-label">Relay Controls (Mod3)</div>
         
         <div class="crio-flex-row">
           <!-- Traffic Light (Vertical) -->
           <div class="traffic-light-vertical">
-            <!-- Relay 1: RED -->
             <div class="relay-item-tl relay-red" id="relay-{{ traffic_relays.red }}">
               <label class="toggle-switch">
                 <input type="checkbox" class="relay-cb" data-channel="{{ traffic_relays.red }}"
                   onchange="toggleRelay('{{ traffic_relays.red }}', this.checked)" />
                 <span class="toggle-slider"></span>
               </label>
-              <span class="relay-label">Red (Relay 1)</span>
+              <span class="relay-label">Red</span>
             </div>
-            
-            <!-- Relay 2: YELLOW -->
             <div class="relay-item-tl relay-yellow" id="relay-{{ traffic_relays.yellow }}">
               <label class="toggle-switch">
                 <input type="checkbox" class="relay-cb" data-channel="{{ traffic_relays.yellow }}"
                   onchange="toggleRelay('{{ traffic_relays.yellow }}', this.checked)" />
                 <span class="toggle-slider"></span>
               </label>
-              <span class="relay-label">Yellow (Relay 2)</span>
+              <span class="relay-label">Yellow</span>
             </div>
-
-            <!-- Relay 3: GREEN -->
             <div class="relay-item-tl relay-green" id="relay-{{ traffic_relays.green }}">
               <label class="toggle-switch">
                 <input type="checkbox" class="relay-cb" data-channel="{{ traffic_relays.green }}"
                   onchange="toggleRelay('{{ traffic_relays.green }}', this.checked)" />
                 <span class="toggle-slider"></span>
               </label>
-              <span class="relay-label">Green (Relay 3)</span>
+              <span class="relay-label">Green</span>
             </div>
           </div>
 
-          <!-- Other Relays in separate grid -->
           <div class="relay-grid">
             {% for name, ch_id in relay_channels.items() %}
-            {# Skip Relay 1, 2, 3 as they are now in the traffic light #}
             {% if ch_id not in traffic_relays.values() %}
             <div class="relay-item" id="relay-{{ ch_id }}">
               <label class="toggle-switch">
@@ -121,7 +113,10 @@
         <div class="pyro-control-box">
           <div class="pyro-header">
             <span class="pyro-title">Optical Pyrometer</span>
-            <span class="badge badge-mock" id="pyro-status-badge">ACTIVE</span>
+            <div style="display:flex; gap:5px;">
+              <span class="badge badge-mock" id="pyro-status-badge">---</span>
+              <span class="badge badge-mock" id="pyro-verify-badge" style="background:#666">UNVERIFIED</span>
+            </div>
           </div>
           <div class="pyro-main" style="position:relative">
             <div class="pyro-error" id="pyro-error-msg" style="border-radius:var(--rs)">OFFLINE</div>
@@ -138,17 +133,25 @@
         </div>
 
         <div class="section-label" style="margin-top:15px; display:flex; justify-content:space-between; align-items:center;">
-          <span>Analog Sensors</span>
-          <button class="btn btn-xs" onclick="fetchCrioRawData()">RAW DATA</button>
+          <span>Analog Sensors (Mod2/Mod4)</span>
+          <div id="mod4-summary" style="font-size:9px; opacity:0.6; font-family:var(--mono)">---</div>
         </div>
         <div class="temp-grid">
           {% for name, ch_id in temp_channels.items() %}
-          {# Skip Pyrometer here as it has its own box #}
           {% if ch_id != 'temp_pyro' %}
-          <div class="temp-card">
-            <div class="temp-value mono" id="tempval-{{ ch_id }}">—</div>
-            <div class="temp-unit">°C</div>
+          <div class="temp-card" id="card-{{ ch_id }}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div class="temp-value mono" id="tempval-{{ ch_id }}">---</div>
+              <select class="tc-selector" id="tc-type-{{ ch_id }}" 
+                      onchange="saveTCPreference('{{ ch_id }}', this.value)">
+                <option value="K">Type K</option>
+                <option value="C">Type C</option>
+                <option value="RAW">Raw mV</option>
+              </select>
+            </div>
+            <div class="temp-unit" id="tempunit-{{ ch_id }}">°C</div>
             <div class="temp-name">{{ name }}</div>
+            <div class="temp-raw" id="tempraw-{{ ch_id }}">--- mV</div>
             <div class="temp-bar">
               <div class="temp-bar-fill" id="tempbar-{{ ch_id }}"></div>
             </div>
@@ -156,15 +159,25 @@
           {% endif %}
           {% endfor %}
         </div>
+
+        <div class="cjc-footer" style="margin-top:10px; font-size:10px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; background:var(--surface2); padding:5px 10px; border-radius:4px;">
+          <div>CJC: <span id="cjc-val" class="mono">22.0</span>°C (<span id="cjc-source">Default</span>)</div>
+          <div style="display:flex; align-items:center; gap:5px;">
+            <span>Override:</span>
+            <input type="number" id="cjc-override" value="22" step="0.1" style="width:45px; background:var(--surface3); border:1px solid var(--border); color:var(--text); font-size:10px; padding:2px;" 
+                   onchange="saveCjcOverride(this.value)">
+            <button class="btn btn-xs" onclick="toggleCjcAuto()" id="cjc-auto-btn">Auto</button>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- ─── COL 2 TOP: Duet 3 6HC ─── -->
+    <!-- ——— COL 2 TOP: Duet 3 6HC ——— -->
     <section class="card" id="duet-panel">
       <div class="card-header">
-        <span class="card-icon">🖨</span>
+        <span class="card-icon">📠</span>
         <h2>Duet 3 6HC</h2>
-        <span class="card-subtitle mono">{{ duet_ip }}</span>
+        <span class="card-subtitle mono">{{ duet_ip }}</span><div class="heartbeat-wrap" id="duet-hb"><div class="hb-group"><span class="hb-label">TX</span><div class="hb-dot hb-tx"></div></div><div class="hb-group"><span class="hb-label">RX</span><div class="hb-dot hb-rx"></div></div></div>
         <span class="conn-badge" id="duet-status-badge">–</span>
       </div>
       <div class="card-body">
@@ -189,7 +202,7 @@
             <div class="gcode-editor-header">
               <span>🏠 Homing GCode</span>
               <button class="btn btn-xs" onclick="saveGcode('home')">Save</button>
-              <button class="btn btn-xs" onclick="renderViz()">↻ Viz</button>
+              <button class="btn btn-xs" onclick="renderViz()">⟳ Viz</button>
             </div>
             <textarea id="gcode-home-editor" class="gcode-ta" spellcheck="false" placeholder="; Homing sequence…"
               oninput="renderViz()"></textarea>
@@ -198,7 +211,7 @@
             <div class="gcode-editor-header">
               <span>🔄 Process GCode <small>(loop)</small></span>
               <button class="btn btn-xs" onclick="saveGcode('process')">Save</button>
-              <button class="btn btn-xs" onclick="renderViz()">↻ Viz</button>
+              <button class="btn btn-xs" onclick="renderViz()">⟳ Viz</button>
             </div>
             <textarea id="gcode-process-editor" class="gcode-ta" spellcheck="false" placeholder="; Repeating process…"
               oninput="renderViz()"></textarea>
@@ -254,7 +267,7 @@
       </div>
     </section>
 
-    <!-- ─── COL 3 TOP: GCode Visualizer ─── -->
+    <!-- ——— COL 3 TOP: GCode Visualizer ——— -->
     <section class="card" id="viz-panel">
       <div class="card-header">
         <span class="card-icon">🗺</span>
@@ -291,18 +304,17 @@
       </div>
     </section>
 
-    <!-- ─── COL 1 BOTTOM: Induction Furnace ─── -->
+    <!-- ——— COL 1 BOTTOM: Induction Furnace ——— -->
     <section class="card" id="furnace-panel">
       <div class="card-header">
         <span class="card-icon">🔥</span>
         <h2>Induction Furnace</h2>
-        <span class="card-subtitle mono">{{ furnace_ip }}</span>
+        <span class="card-subtitle mono">{{ furnace_ip }}</span><div class="heartbeat-wrap" id="furnace-hb"><div class="hb-group"><span class="hb-label">TX</span><div class="hb-dot hb-tx"></div></div><div class="hb-group"><span class="hb-label">RX</span><div class="hb-dot hb-rx"></div></div></div>
         <span class="conn-badge" id="furnace-status-badge">–</span>
-        <button class="btn btn-xs" style="margin-left:auto" onclick="openProgModal()" title="Edit heating programs">📋
-          Programs</button>
-        <button class="btn btn-xs" onclick="openErrModal()" title="Error decoder" id="err-modal-btn">⚠ Errors</button>
-        <button class="btn btn-xs" onclick="openProtoModal()" title="Protocol Inspector — raw byte/bit view"
-          id="proto-modal-btn">🔬 Inspector</button>
+        <button class="btn btn-xs" onclick="openProgModal()">📋 Programs</button>
+        <button class="btn btn-xs" onclick="openErrModal()">⚠️ Errors</button>
+        <button class="btn btn-xs" onclick="openProtoModal()">🔬 Inspector</button>
+        <button class="btn btn-xs btn-purple" onclick="openConsoleModal()">📟 Console</button>
       </div>
       <div class="card-body furnace-body">
         <!-- Row 1: Gauge + Live Data -->
@@ -436,7 +448,7 @@
       </div>
     </section>
 
-    <!-- ─── COL 2 BOTTOM: Camera Streams ─── -->
+    <!-- ——— COL 2 BOTTOM: Camera Streams ——— -->
     <section class="card" id="cameras-panel">
       <div class="card-header">
         <span class="card-icon">📷</span>
@@ -461,7 +473,7 @@
       </div>
     </section>
 
-    <!-- ─── COL 3 BOTTOM: Process Chart ─── -->
+    <!-- ——— COL 3 BOTTOM: Process Chart ——— -->
     <section class="card" id="chart-panel">
       <div class="card-header">
         <span class="card-icon">📈</span>
@@ -487,11 +499,9 @@
   </main>
 
 
+  <!-- ======================== MODALS ======================== -->
 
-
-
-
-  <!-- ══════ MODAL: Heating Program Editor ══════ -->
+  <!-- MODAL: Heating Program Editor -->
   <div class="modal-overlay" id="prog-modal" style="display:none" onclick="if(event.target===this)closeProgModal()">
     <div class="modal">
       <div class="modal-header">
@@ -506,7 +516,7 @@
           <button class="btn btn-xs" onclick="hpExport()">Export JSON</button>
           <button class="btn btn-xs" onclick="hpImport()">Import JSON</button>
           <input type="file" id="hp-import-file" accept=".json" style="display:none" onchange="hpImportFile(event)" />
-          <button class="btn btn-xs" onclick="closeProgModal()" style="margin-left:12px">✕ Close</button>
+          <button class="btn btn-xs" onclick="closeProgModal()" style="margin-left:12px">✖ Close</button>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -536,31 +546,31 @@
     </div>
   </div>
 
-  <!-- ══════ MODAL: Error Decoder ══════ -->
+  <!-- MODAL: Error Decoder -->
   <div class="modal-overlay" id="err-modal" style="display:none" onclick="if(event.target===this)closeErrModal()">
     <div class="modal" style="max-width:700px">
       <div class="modal-header">
-        <span>⚠ Error Decoder — word: <span class="mono" id="err-word-hex-modal">0x00000000</span></span>
+        <span>⚠️ Error Decoder — word: <span class="mono" id="err-word-hex-modal">0x00000000</span></span>
         <div style="display:flex;gap:8px">
           <button class="btn btn-xs" onclick="furnaceAckError()">ACK Error</button>
-          <button class="btn btn-xs" onclick="closeErrModal()">✕ Close</button>
+          <button class="btn btn-xs" onclick="closeErrModal()">✖ Close</button>
         </div>
       </div>
       <div class="error-grid" id="error-grid"></div>
     </div>
   </div>
 
-  <!-- ══════ MODAL: Protocol Inspector ══════ -->
+  <!-- MODAL: Protocol Inspector -->
   <div class="modal-overlay proto-overlay" id="proto-modal" style="display:none"
     onclick="if(event.target===this)closeProtoModal()">
     <div class="modal proto-modal-box">
       <div class="modal-header">
         <span>🔬 Protocol Inspector — Furnace UDP Cyclic Telegram (<span class="mono">{{ furnace_ip }}</span>)
-          <span class="mono small" id="proto-refresh-dot" style="color:#6ee7b7;margin-left:8px">⬤ live</span>
+          <span class="mono small" id="proto-refresh-dot" style="color:#6ee7b7;margin-left:8px">↔ live</span>
         </span>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-xs" onclick="fetchRawPackets()">↺ Refresh</button>
-          <button class="btn btn-xs" onclick="closeProtoModal()">✕ Close</button>
+          <button class="btn btn-xs" onclick="closeProtoModal()">✖ Close</button>
         </div>
       </div>
       <!-- Two-panel body -->
@@ -595,27 +605,72 @@
     </div><!-- .modal -->
   </div><!-- #proto-modal -->
 
-  <!-- ══════════════ Modal: cRIO JSON Protocol Inspector ══════════════ -->
+  <!-- Modal: cRIO JSON Protocol Inspector -->
   <div class="modal-overlay" id="crio-proto-modal" style="display:none">
     <div class="modal proto-modal-alt">
       <div class="modal-header">
         <div class="modal-title">
-          <span class="card-icon">🔍</span>
+          <span class="card-icon">🔎</span>
           <span id="crio-proto-title">cRIO JSON Inspector</span>
         </div>
         <div class="modal-actions">
           <button class="btn btn-xs" onclick="fetchCrioRawData()">↺ Refresh</button>
-          <button class="btn btn-xs" onclick="el('crio-proto-modal').style.display='none'">✕ Close</button>
+          <button class="btn btn-xs" onclick="closeCrioInspector()">✖ Close</button>
         </div>
       </div>
       <div class="proto-body">
         <div class="proto-panel">
-          <div class="proto-panel-title">📤 LAST REQUEST (JSON)</div>
+          <div class="proto-panel-title">📤 LAST USER COMMAND (JSON)</div>
           <div class="hex-dump json-box" id="crio-tx-dump"></div>
         </div>
         <div class="proto-panel">
-          <div class="proto-panel-title">📥 LAST RESPONSE (JSON)</div>
+          <div class="proto-panel-title">📥 LAST USER RESPONSE (JSON)</div>
           <div class="hex-dump json-box" id="crio-rx-dump"></div>
+        </div>
+        <div class="proto-panel">
+          <div class="proto-panel-title">↔ LATEST TELEMETRY (UDP)</div>
+          <div class="hex-dump json-box" id="crio-telemetry-dump"></div>
+          <div class="proto-panel-footer" id="crio-hb-footer" style="font-size:9px; margin-top:5px; opacity:0.6; font-family:var(--mono)">
+            Heartbeat: <span id="crio-hb-status">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Service Console (Terminal) -->
+  <div class="modal-overlay" id="console-modal" style="display:none"
+       onclick="if(event.target===this)closeConsoleModal()">
+    <div class="modal console-modal">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="card-icon">📟</span>
+          <span>Furnace Service Console</span>
+          <span class="mono small" id="console-refresh-dot" style="color:var(--purple);margin-left:8px">↔ streaming</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-xs" onclick="clearConsole()">🧹 Clear</button>
+          <button class="btn btn-xs" onclick="closeConsoleModal()">✖ Close</button>
+        </div>
+      </div>
+      <div class="console-body">
+        <div class="console-display" id="console-output"></div>
+        <div class="console-toolkit">
+          <div class="tiny-label">ICC Debugger Toolkit:</div>
+          <div class="toolkit-grid">
+            <button class="btn btn-xs btn-outline" onclick="sendConsoleFixed('GET_STATE')" title="Get current FSM state">🔍 State</button>
+            <button class="btn btn-xs btn-outline" onclick="sendConsoleFixed('PRINT_ERRORS')" title="Print pending errors">⚠️ Errors</button>
+            <button class="btn btn-xs btn-outline" onclick="sendConsoleFixed('PRINT_SYSINFO')" title="Print hardware/software info">ℹ️ System</button>
+            <button class="btn btn-xs btn-outline" onclick="sendConsoleFixed('TLS')" title="Task list (RTOS statistics)">📋 Tasks</button>
+            <button class="btn btn-xs btn-outline" onclick="sendConsoleFixed('RTS')" title="Runtime statistics">📈 Stats</button>
+            <button class="btn btn-xs btn-outline" onclick="sendConsoleFixed('PRINT_PARAM_TABLE')" title="Dump all internal parameters">📦 Params</button>
+            <button class="btn btn-xs btn-danger" onclick="sendConsoleFixed('RESET_SYSTEM')" title="CAUTION: Soft-reboot the generator">🔄 Reset</button>
+          </div>
+        </div>
+        <div class="console-input-row">
+          <input type="text" id="console-input" placeholder="Type command (e.g. HELP, RESTART, STATUS)..." 
+                 onkeyup="if(event.key==='Enter')sendConsoleCommand()">
+          <button class="btn btn-purple" onclick="sendConsoleCommand()">Send ↵</button>
         </div>
       </div>
     </div>
@@ -625,15 +680,18 @@
   <script src="/static/app.js"></script>
   <script>
     window.PCFG = {
-      mockMode: {{ 'true' if mock_mode else 'false' }},
-      furnaceMax: {{ furnace_max }},
-      furnaceMin: {{ furnace_min }},
-      numPrograms: {{ furnace_num_programs }},
-      numPhases: {{ furnace_num_phases }},
-      trafficRelays: {{ traffic_relays | tojson }},
-      furnacePresets: {{ furnace_presets | tojson }},
-      crioIp: "{{ crio_ip }}",
+        pollInterval: {{ poll_interval }},
+        furnaceMax:  {{ furnace_max }},
+        furnaceMin:  {{ furnace_min }},
+        numPrograms: {{ furnace_num_programs }},
+        numPhases:   {{ furnace_num_phases }},
+        presets:     {{ furnace_presets | tojson }},
+        relayChannels: {{ relay_channels | tojson }},
+        tempChannels:  {{ temp_channels | tojson }},
+        trafficRelays: {{ traffic_relays | tojson }},
+        cameras:       {{ cameras_list | tojson }}
     };
+
   </script>
 </body>
 

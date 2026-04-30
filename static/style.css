@@ -1,9 +1,9 @@
 /* ============================================================
-   style.css — Process Control Dashboard
+   style.css â€” Process Control Dashboard
    Viewport-filling, no-scroll layout
    ============================================================ */
 
-/* ── Tokens ─────────────────────────────────────────────── */
+/* â”€â”€ Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
   --bg: #0d0f18;
   --surface: #131621;
@@ -45,7 +45,7 @@ body {
   font-size: 13px;
 }
 
-/* ── Top bar ─────────────────────────────────────────────── */
+/* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .topbar {
   height: 48px;
   flex-shrink: 0;
@@ -198,7 +198,7 @@ body {
   color: var(--muted);
 }
 
-/* ── Grid (viewport-filling, 3×2) ────────────────────────── */
+/* â”€â”€ Grid (viewport-filling, 3Ã—2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -209,7 +209,7 @@ body {
   overflow: hidden;
 }
 
-/* ── Cards ────────────────────────────────────────────────── */
+/* â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -264,8 +264,8 @@ body {
   margin-bottom: 4px;
 }
 
-/* ── cRIO ─────────────────────────────────────────────────── */
-/* ── cRIO ─────────────────────────────────────────────────── */
+/* â”€â”€ cRIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â”€â”€ cRIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .crio-flex-row {
   display: flex;
   gap: 12px;
@@ -546,7 +546,7 @@ body {
   transition: width .5s;
 }
 
-/* ── Duet ────────────────────────────────────────────────── */
+/* â”€â”€ Duet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .duet-state-row {
   display: flex;
   align-items: center;
@@ -750,7 +750,7 @@ body {
   border-color: var(--purple);
 }
 
-/* ── Furnace ─────────────────────────────────────────────── */
+/* â”€â”€ Furnace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .furnace-body {
   gap: 6px;
 }
@@ -814,7 +814,7 @@ body {
   color: var(--muted);
 }
 
-/* Live data grid — always visible */
+/* Live data grid â€” always visible */
 .live-grid {
   flex: 1;
   display: grid;
@@ -1164,7 +1164,7 @@ body {
   flex: 1;
 }
 
-/* ── Camera placeholder ──────────────────────────────────── */
+/* â”€â”€ Camera placeholder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1191,7 +1191,7 @@ body {
   text-align: center;
 }
 
-/* ── Buttons ─────────────────────────────────────────────── */
+/* â”€â”€ Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn {
   padding: 6px 12px;
   font-size: 12px;
@@ -1253,7 +1253,7 @@ body {
   border-color: var(--purple);
 }
 
-/* ── Modals ──────────────────────────────────────────────── */
+/* â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1413,11 +1413,11 @@ code {
   font-size: 11px;
 }
 
-/* ══════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Process Chart Card
-   ══════════════════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* Chart card body — fills remaining height, gives canvas room */
+/* Chart card body â€” fills remaining height, gives canvas room */
 .chart-card-body {
   flex: 1;
   min-height: 0;
@@ -1474,9 +1474,9 @@ code {
   outline: none;
 }
 
-/* ══════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Jog Controls
-   ══════════════════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .jog-section {
   display: flex;
   align-items: center;
@@ -1550,9 +1550,9 @@ code {
   color: var(--purple);
 }
 
-/* ══════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    GCode Visualizer Card
-   ══════════════════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .viz-card-body {
   flex: 1;
   min-height: 0;
@@ -1585,9 +1585,9 @@ code {
 }
 
 
-══════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* Overlay — same as existing but wider modal */
+/* Overlay â€” same as existing but wider modal */
 .proto-overlay {
   z-index: 200;
 }
@@ -1991,7 +1991,7 @@ code {
   font-weight: 700;
 }
 
-/* ── Protocol Modal Alt (cRIO) ────────────────────────── */
+/* â”€â”€ Protocol Modal Alt (cRIO) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .proto-modal-alt {
   width: 900px !important;
   max-width: 95vw;
@@ -2015,3 +2015,194 @@ code {
   gap: 6px;
   align-items: center;
 }
+/* -- Console Modal ----------------------------------------- */
+.console-modal {
+  width: 900px;
+  max-width: 95vw;
+  height: 600px;
+  max-height: 85vh;
+}
+
+.console-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+  min-height: 0;
+  background: #000;
+}
+
+.console-display {
+  flex: 1;
+  background: #050505;
+  border: 1px solid #222;
+  border-radius: var(--rs);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #38bdf8;
+  padding: 10px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.console-line {
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+  padding-bottom: 2px;
+}
+
+.console-sent {
+  color: var(--purple);
+  font-weight: 700;
+}
+
+.console-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.console-input-row input {
+  flex: 1;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: var(--rs);
+  color: #fff;
+  font-family: inherit;
+  padding: 8px 12px;
+  outline: none;
+}
+
+.console-input-row input:focus {
+  border-color: var(--purple);
+}
+
+.btn-purple {
+  background: var(--purple);
+  color: rgba(255, 255, 255, 0.9);
+  border: none;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--rs);
+  cursor: pointer;
+}
+
+.btn-purple:hover {
+  filter: brightness(1.1);
+}
+
+.console-quick-cmds {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--surface2);
+  border-radius: var(--rs);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--purple);
+  color: var(--purple);
+}
+
+.btn-outline:hover {
+  background: var(--purple);
+  color: #fff;
+}
+
+.console-toolkit {
+  padding: 8px 12px;
+  background: #111;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+}
+
+.toolkit-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.btn-danger {
+  background: #4a0000;
+  border: 1px solid #d00;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #d00;
+}
+
+/* -- Heartbeat Indicators -------------------------------- */
+.heartbeat-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-right: 12px;
+  background: rgba(0,0,0,0.25);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.hb-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hb-label {
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.hb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1f2438;
+  transition: all 0.1s;
+}
+
+.hb-dot.hb-rx.blink { 
+  background: var(--green); 
+  box-shadow: 0 0 8px var(--green);
+}
+
+.hb-dot.hb-tx.blink { 
+  background: var(--purple); 
+  box-shadow: 0 0 8px var(--purple);
+}
+
+
+ / *   T C   S e l e c t o r   &   R a w   d i s p l a y   * / 
+ . t c - s e l e c t o r   { 
+     b a c k g r o u n d :   v a r ( - - s u r f a c e 3 ) ; 
+     b o r d e r :   1 p x   s o l i d   v a r ( - - b o r d e r ) ; 
+     b o r d e r - r a d i u s :   4 p x ; 
+     c o l o r :   v a r ( - - m u t e d ) ; 
+     f o n t - s i z e :   9 p x ; 
+     p a d d i n g :   1 p x   3 p x ; 
+     o u t l i n e :   n o n e ; 
+     c u r s o r :   p o i n t e r ; 
+ } 
+ . t c - s e l e c t o r : h o v e r   {   b o r d e r - c o l o r :   v a r ( - - p u r p l e ) ;   c o l o r :   v a r ( - - t e x t ) ;   } 
+ . t e m p - r a w   { 
+     f o n t - s i z e :   9 p x ; 
+     f o n t - f a m i l y :   v a r ( - - m o n o ) ; 
+     c o l o r :   v a r ( - - m u t e d ) ; 
+     m a r g i n - t o p :   4 p x ; 
+     o p a c i t y :   0 . 6 ; 
+ } 
+ . w a r m i n g - t e x t   { 
+     c o l o r :   v a r ( - - y e l l o w )   ! i m p o r t a n t ; 
+     f o n t - s i z e :   1 4 p x   ! i m p o r t a n t ; 
+ } 
+  
+ 

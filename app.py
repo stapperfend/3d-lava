@@ -34,7 +34,6 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 # ---------------------------------------------------------------------------
 def _template_context():
     return dict(
-        mock_mode      = config.MOCK,
         crio_ip        = config.CRIO_IP,
         duet_ip        = config.DUET_IP,
         furnace_ip     = config.FURNACE_IP,
@@ -72,7 +71,10 @@ def api_crio_raw_data():
 def api_crio_relay(channel_id):
     data  = request.get_json(force=True)
     state = bool(data.get("state", False))
-    return jsonify(crio.set_relay(channel_id, state))
+    res   = crio.set_relay(channel_id, state)
+    if res.get("ok"):
+        _RELAYS_LATEST[channel_id] = state
+    return jsonify(res)
 
 @app.route("/api/crio/emissivity", methods=["POST"])
 def api_crio_emissivity():
@@ -80,8 +82,12 @@ def api_crio_emissivity():
     value = int(data.get("value", 85))
     return jsonify(crio.set_emissivity(value))
 
+@app.route("/api/crio/debug")
+def api_crio_debug():
+    return jsonify(crio.get_debug_info())
+
 # ---------------------------------------------------------------------------
-# Routes — Duet 3 6HC — GCode terminal
+# Routes — Duet 3 6HC
 # ---------------------------------------------------------------------------
 @app.route("/api/duet/status")
 def api_duet_status():
@@ -97,7 +103,6 @@ def api_duet_gcode():
         return jsonify({"ok": False, "error": "Empty command"})
     return jsonify(duet.send_gcode(cmd))
 
-# Routes — GCode file editor
 @app.route("/api/duet/gcode/<name>", methods=["GET"])
 def api_duet_gcode_get(name):
     if name not in ("home", "process"):
@@ -111,7 +116,6 @@ def api_duet_gcode_save(name):
     data = request.get_json(force=True)
     return jsonify(duet.save_gcode(name, str(data.get("text", ""))))
 
-# Routes — Homing & Process loop
 @app.route("/api/duet/home/run", methods=["POST"])
 def api_duet_home_run():
     return jsonify(duet.start_homing())
@@ -133,7 +137,7 @@ def api_duet_process_state():
     return jsonify(duet.get_process_state())
 
 # ---------------------------------------------------------------------------
-# Routes — Induction Furnace (main cyclic control)
+# Routes — Induction Furnace
 # ---------------------------------------------------------------------------
 @app.route("/api/furnace/status")
 def api_furnace_status():
@@ -148,12 +152,6 @@ def api_furnace_setpoint():
 def api_furnace_enable():
     data   = request.get_json(force=True)
     return jsonify(furnace.set_enable(bool(data.get("enable", False))))
-
-@app.route("/api/furnace/program/select", methods=["POST"])
-def api_furnace_program_select():
-    data    = request.get_json(force=True)
-    prog_no = int(data.get("prog_no", 0))
-    return jsonify(furnace.set_selected_program(prog_no))
 
 @app.route("/api/furnace/mode", methods=["POST"])
 def api_furnace_mode():
@@ -171,7 +169,6 @@ def api_furnace_reset_energy():
 
 @app.route("/api/furnace/manual", methods=["POST"])
 def api_furnace_manual():
-    """Manual mode: set power% and current% (no temperature setpoint in cyclic telegram)."""
     data = request.get_json(force=True)
     return jsonify(furnace.set_manual_control(
         float(data.get("power_pct",   0)),
@@ -180,12 +177,20 @@ def api_furnace_manual():
 
 @app.route("/api/furnace/start_program", methods=["POST"])
 def api_furnace_start_program():
-    """Switch to auto mode, set program number, and enable the furnace."""
     data    = request.get_json(force=True)
     prog_no = int(data.get("prog_no", 1))
     return jsonify(furnace.start_program(prog_no))
 
-# Routes — Heating programs (service port 4660)
+@app.route("/api/furnace/console")
+def api_furnace_console():
+    return jsonify({"logs": furnace.get_console_logs()})
+
+@app.route("/api/furnace/console/command", methods=["POST"])
+def api_furnace_console_command():
+    data = request.get_json(force=True)
+    cmd  = str(data.get("command", ""))
+    return jsonify({"ok": furnace.send_console_command(cmd)})
+
 @app.route("/api/furnace/program/<int:prog_no>", methods=["GET"])
 def api_furnace_program_get(prog_no):
     return jsonify(furnace.get_program(prog_no))
@@ -202,16 +207,13 @@ def api_furnace_programs_list():
 
 @app.route("/api/furnace/raw_packets")
 def api_furnace_raw_packets():
-    """Protocol Inspector — returns annotated TX + RX byte arrays."""
     return jsonify(furnace.get_raw_packets())
-
 
 # ---------------------------------------------------------------------------
 # Routes — History / Process Chart
 # ---------------------------------------------------------------------------
 @app.route("/api/history")
 def api_history():
-    """Return time-series samples. Optional ?window=<seconds> to limit range."""
     window = request.args.get("window", type=float)
     samples = history.get_last_seconds(window) if window else history.get_all()
     return jsonify(samples)
@@ -224,18 +226,15 @@ def stream_camera(cam_id):
     return "Camera stream not yet implemented", 501
 
 # ---------------------------------------------------------------------------
-# SocketIO — real-time status broadcaster
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Parallel Broadcasters — Decoupled real-time status
 # ---------------------------------------------------------------------------
-
 _LATEST = {
     "crio": {},
     "duet": {},
     "furnace": {},
 }
 _LATEST_LOCK = threading.Lock()
+_RELAYS_LATEST = {}  # Cache relay states since we no longer read them from hardware for the UI
 
 def _update_latest(key, data):
     with _LATEST_LOCK:
@@ -258,23 +257,15 @@ def _broadcaster_crio():
         try:
             st = crio.get_all_status()
             _update_latest("crio", st)
-            
-            # Derive traffic-light states
             tr_red    = config.TRAFFIC_RELAYS["red"]
             tr_yellow = config.TRAFFIC_RELAYS["yellow"]
             tr_green  = config.TRAFFIC_RELAYS["green"]
-            
-            red_on    = bool(st.get("relays", {}).get(tr_red,    False))
-            yellow_on = bool(st.get("relays", {}).get(tr_yellow, False))
-            green_on  = bool(st.get("relays", {}).get(tr_green,  False))
-            
+            red_on    = bool(_RELAYS_LATEST.get(tr_red,    False))
+            yellow_on = bool(_RELAYS_LATEST.get(tr_yellow, False))
+            green_on  = bool(_RELAYS_LATEST.get(tr_green,  False))
             socketio.emit("status_update", {
                 "crio": st,
-                "traffic": {
-                    "red": red_on, 
-                    "yellow": yellow_on, 
-                    "green": green_on
-                }
+                "traffic": {"red": red_on, "yellow": yellow_on, "green": green_on}
             })
         except Exception as e:
             print(f"[broadcaster-crio] {e}")
@@ -293,52 +284,41 @@ def _broadcaster_duet():
         time.sleep(interval)
 
 def _history_logger():
-    # Log to history at a stable 200ms
     interval = 0.2
     while True:
         time.sleep(interval)
         with _LATEST_LOCK:
-            furnace_st = _LATEST["furnace"]
-            crio_st    = _LATEST["crio"]
-            duet_st    = _LATEST["duet"]
-        
-        if not furnace_st: continue # Wait for first data
-        
+            f_st = _LATEST["furnace"]
+            c_st = _LATEST["crio"]
+        if not f_st: continue
         history.append({
             "t":       time.time(),
-            "temp":    furnace_st.get("actual"),
-            "power":   furnace_st.get("actual_power"),
-            "current": furnace_st.get("actual_current"),
-            "freq":    furnace_st.get("actual_freq"),
-            "water":   furnace_st.get("water_flow"),
-            "energy":  furnace_st.get("actual_energy"),
-            "cap_v":   furnace_st.get("cap_voltage"),
-            "dc_v":    furnace_st.get("dc_voltage"),
-            "fsm":     furnace_st.get("fsm_state"),
-            "crio_temps": dict(crio_st.get("temperatures", {})),
+            "temp":    f_st.get("actual"),
+            "power":   f_st.get("actual_power"),
+            "current": f_st.get("actual_current"),
+            "freq":    f_st.get("actual_freq"),
+            "water":   f_st.get("water_flow"),
+            "energy":  f_st.get("actual_energy"),
+            "cap_v":   f_st.get("cap_voltage"),
+            "dc_v":    f_st.get("dc_voltage"),
+            "fsm":     f_st.get("fsm_state"),
+            "status":  f_st.get("status_fsm_raw"),
+            "crio_temps": dict(c_st.get("temperatures", {})),
         })
 
-# ---------------------------------------------------------------------------
-# Start background broadcasters
-# ---------------------------------------------------------------------------
+# Start background tasks
+crio.start_background_tasks()
+
+# Start broadcasters
 threading.Thread(target=_broadcaster_furnace, daemon=True).start()
 threading.Thread(target=_broadcaster_crio,    daemon=True).start()
 threading.Thread(target=_broadcaster_duet,    daemon=True).start()
 threading.Thread(target=_history_logger,      daemon=True).start()
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     print("\n" + "="*55)
     print("  3D Print Process Control GUI")
-    print(f"  Mock mode: {'ON  (no hardware needed)' if config.MOCK else 'OFF (real hardware)'}")
+    print(f"  Status: {'REAL HARDWARE MODE'}")
     print(f"  Open: http://localhost:{config.FLASK_PORT}")
     print("="*55 + "\n")
-    socketio.run(
-        app,
-        host=config.FLASK_HOST,
-        port=config.FLASK_PORT,
-        debug=config.FLASK_DEBUG,
-        allow_unsafe_werkzeug=True,
-    )
+    socketio.run(app, host=config.FLASK_HOST, port=config.FLASK_PORT, debug=config.FLASK_DEBUG, use_reloader=False, allow_unsafe_werkzeug=True)

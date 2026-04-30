@@ -1,186 +1,100 @@
-# cRIO TCP JSON Protocol Specification
-## For the LabVIEW RT VI Developer
+# cRIO DAQ & Control Protocol Specification
+## Hybrid UDP Telemetry + TCP Transactional Interface
 
-This document defines the TCP communication protocol between the Python Flask server (host PC) and the NI cRIO real-time controller.
-
----
-
-## Connection Model
-
-- **Server**: LabVIEW RT VI on cRIO listens on **TCP port 5020** (configurable in `config.py`)
-- **Client**: Python driver (`drivers/crio.py`) connects, sends a command, reads the reply, and closes the connection
-- **Format**: Each message is a single **UTF-8 JSON string terminated by a newline character** (`\n`)
-- **One request → one response per connection** (simplest model; can be extended to persistent connection later)
+This document defines the communication protocol between the Python Flask server (host PC) and the NI cRIO real-time controller.
 
 ---
 
-## Message Format
+## 1. Real-Time Telemetry Stream (UDP)
+The cRIO broadcasts a continuous telemetry stream for high-frequency monitoring.
 
-### Request (Host → cRIO)
+- **Source**: NI cRIO-9057
+- **Destination**: 192.168.137.1 (PC)
+- **Port**: 5021
+- **Frequency**: 10Hz (~100ms interval)
+- **Format**: Newline-terminated JSON string (`\n`)
+
+### UDP Payload Structure
 ```json
 {
-  "action": "<action_name>",
-  ... action-specific fields ...
-}
-\n
-```
-
-### Response (cRIO → Host)
-```json
-{
-  "ok": true,
-  ... action-specific fields ...
-}
-\n
-```
-On error:
-```json
-{
-  "ok": false,
-  "error": "Human readable error description"
-}
-\n
-```
-
----
-
-## Actions
-
-### 1. `get_all`
-Read all relay states and all temperature channels at once.
-
-**Request:**
-```json
-{"action": "get_all"}
-```
-
-**Response:**
-```json
-{
-  "ok": true,
+  "timestamp": 1714402145.123,
   "relays": {
-    "relay_0": false,
-    "relay_1": true,
-    "relay_2": false,
-    "relay_3": false,
-    "relay_4": false,
-    "relay_5": false
+    "relay_0": false, ..., "relay_15": false
   },
   "temperatures": {
-    "temp_0": 215.3,
-    "temp_1": 60.1,
-    "temp_2": 35.7,
-    "temp_3": 22.4,
+    "tc": [float, ...],           // 16 channels (Mod2)
+    "volt": [float, ...],         // 8 channels (Mod4 AI 0-7)
+    "curr": [float, ...],         // 8 channels (Mod4 AI 8-15)
+    "pyro_digital": float,        // Metis MY51 Digital Temp
+    "pyro_analog": float,         // Metis MY51 Analog Backup
+    "emissivity": int             // Active pyrometer emissivity
+  },
+  "error": string|null            // Diagnostic feedback
+}
+```
+
+---
+
+## 2. Command & Control Interface (TCP)
+Used for reliable, transactional updates to system state.
+
+- **IP**: 192.168.137.100 (cRIO)
+- **Port**: 5020
+- **Model**: Sequential Request-Response
+- **Termination**: Newline (`\n`)
+
+### Supported Actions
+
+#### A. `get_all`
+Read current state of all relays and temperature channels.
+**Request**: `{"action": "get_all"}`
+**Response**:
+```json
+{
+  "ok": true,
+  "relays": {"relay_0": false, ..., "relay_5": false},
+  "temperatures": {
+    "temp_0": 25.1, "temp_1": 25.3, "temp_2": 25.0, "temp_3": 25.2,
     "temp_pyro": 850.0
   }
 }
 ```
 
----
-
-### 2. `set_relay`
+#### B. `set_relay`
 Set a single relay output.
+**Request**: `{"action": "set_relay", "channel": "relay_0", "state": true}`
+**Response**: `{"ok": true}`
 
-**Request:**
-```json
-{"action": "set_relay", "channel": "relay_2", "state": true}
-```
-- `channel`: string matching one of the relay IDs defined in `config.py`
-- `state`: boolean (`true` = energised / on, `false` = de-energised / off)
-
-**Response:**
-```json
-{"ok": true}
-```
-
----
-
-### 3. `read_temp`
-Read a single temperature channel.
-
-**Request:**
-```json
-{"action": "read_temp", "channel": "temp_0"}
-```
-
-**Response:**
-```json
-{"ok": true, "value": 215.3}
-```
-Value is in **°C**. If the channel does not exist or the measurement fails, return `{"ok": false, "error": "..."}`.
-Special case for `temp_pyro`: returns `-1.0` during warming/stabilization phase.
-
----
-
-### 4. `set_emissivity`
+#### C. `set_emissivity`
 Set the emissivity of the pyrometer (Metis RS232).
+**Request**: `{"action": "set_emissivity", "value": "85"}`
+**Response**: `{"ok": true}`
+*Note: Value "100" is internally mapped to "00" per hardware spec.*
 
-**Request:**
-```json
-{"action": "set_emissivity", "value": "85"}
-```
-- `value`: two-digit string ("20"..."99", or "00" for 100%)
+#### D. `read_temp`
+Read a single temperature channel.
+**Request**: `{"action": "read_temp", "channel": "temp_0"}`
+**Response**: `{"ok": true, "value": 25.1}`
 
-**Response:**
-```json
-{"ok": true}
-```
+---
+
+## 3. Safety Watchdog
+The cRIO implements a **2.0 second safety watchdog**. 
+- If no TCP command (or sync action) is received for **>2.0s**, all relays (`relay_0` through `relay_5`) will automatically switch to **False (OFF)**.
+- The Python driver (`crio.py`) automatically sends a heartbeat `get_all` command every 1.5s to prevent accidental timeout during idle periods.
 
 ---
 
 ## LabVIEW RT Implementation Guide
 
-### Recommended VI Structure
+### Recommended Loop Structure
+1. **Telemetry Loop (100ms)**: Read all AI/DI, format JSON, send via UDP `192.168.137.1:5021`.
+2. **TCP Listener Loop**: Accept connection, read JSON, execute case structure, respond, close.
+3. **Watchdog Monitor**: Monitor the timestamp of the last TCP command. If >2.0s, reset DO outputs.
 
-```
-TCP Listen (port 5010)
-  └── Loop:
-        1. TCP Accept Connection → connection ID
-        2. TCP Read until \n    → JSON string
-        3. Parse JSON string     → cluster (action, channel, state, ...)
-        4. Switch on "action":
-             "get_all"   → read all DIO + AI channels, build response cluster
-             "set_relay" → write DO channel[channel] = state, respond ok
-             "read_temp" → read AI channel[channel], respond value
-             default     → respond {"ok": false, "error": "Unknown action"}
-        5. Flatten response cluster to JSON string + \n
-        6. TCP Write response
-        7. TCP Close Connection
-        8. Loop back to Accept
-```
-
-### NI Module Mappings (example — adjust to your hardware)
-
-| channel ID | Module Function       | NI Module Example |
+### NI Module Mappings
+| Channel ID | Function | NI Module |
 |---|---|---|
-| `relay_0`…`relay_5` | Digital Output (relay) | NI 9485, NI 9474 |
-| `temp_0`…`temp_3`   | Thermocouple AI input  | NI 9214, NI 9213 |
-
-### JSON Parsing in LabVIEW RT
-Use the **Unflatten from JSON** VI (available in LabVIEW 2016+) or the **JKISH JSON** library for the cRIO target.
-
----
-
-## Example Python Test Script
-
-Run this on the host PC to test the cRIO VI independently of the Flask server:
-
-```python
-import socket, json
-
-CRIO_IP   = "192.168.137.1"
-CRIO_PORT = 5020
-
-def send(cmd):
-    payload = (json.dumps(cmd) + "\n").encode()
-    with socket.create_connection((CRIO_IP, CRIO_PORT), timeout=3) as s:
-        s.sendall(payload)
-        buf = b""
-        while not buf.endswith(b"\n"):
-            buf += s.recv(4096)
-    return json.loads(buf.decode().strip())
-
-print(send({"action": "get_all"}))
-print(send({"action": "set_relay", "channel": "relay_0", "state": True}))
-print(send({"action": "read_temp", "channel": "temp_0"}))
-```
+| `relay_0`…`relay_5` | Digital Output (Relay) | Mod3 (NI 9485) |
+| `temp_0`…`temp_3` | Thermocouple Input | Mod2 (NI 9214) |
+| `pyro` | RS232 Pyrometer | Serial Port |

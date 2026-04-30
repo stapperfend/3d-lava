@@ -8,8 +8,21 @@
 // ── Helpers ────────────────────────────────────────────────
 const el = id => document.getElementById(id);
 const fmt = (v, d = 1) => (v == null || v === "" || isNaN(+v)) ? "—" : (+v).toFixed(d);
+console.log("[APP] v1.1.2 - Active");
 const post = (url, body = {}) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
 const get = url => fetch(url).then(r => r.json());
+
+// ── Heartbeat Helper ───────────────────────────────────────
+function triggerHB(panelId, type) {
+  try {
+    const dot = document.querySelector(`#${panelId}-hb .hb-${type}`);
+    if (dot) {
+        dot.classList.remove("blink");
+        void dot.offsetWidth;
+        dot.classList.add("blink");
+    }
+  } catch (e) {}
+}
 
 // ── Local state ────────────────────────────────────────────
 const S = {
@@ -21,7 +34,160 @@ const S = {
   wfState: "idle",
   lastErrWord: -1,
   _isProgFocus: false, // Focus tracking
+  tcPrefs: JSON.parse(localStorage.getItem("tc_prefs") || "{}"),
+  cjcMode: localStorage.getItem("cjc_mode") || "auto", // "auto" | "manual"
+  cjcManualVal: parseFloat(localStorage.getItem("cjc_val") || "22.0"),
+  currentCjc: 22.0
 };
+
+// Requirement 9 & 10: Default mapping & migration
+const DEFAULT_TC_TYPES = {
+  "temp_0": "C",
+  "temp_1": "C",
+  "temp_2": "K"
+};
+
+const MIG_VER = "v2_tc_map";
+if (localStorage.getItem("tc_mig") !== MIG_VER) {
+  Object.entries(DEFAULT_TC_TYPES).forEach(([id, type]) => {
+    S.tcPrefs[id] = type;
+  });
+  localStorage.setItem("tc_prefs", JSON.stringify(S.tcPrefs));
+  localStorage.setItem("tc_mig", MIG_VER);
+}
+
+// ── Thermocouple Logic ──────────────────────────────────────
+const TC_TABLES = {
+  // NIST Type K (-200 to 1372 °C)
+  K: [
+    [-200, -5.891], [-100, -3.554], [0, 0.000], [25, 1.000], [50, 2.023], 
+    [100, 4.096], [250, 10.153], [500, 20.644], [750, 31.213], [1000, 41.276], [1372, 54.886]
+  ],
+  // NIST Type C (W5Re/W26Re) (0 to 2315 °C)
+  C: [
+    [0, 0.000], [100, 1.107], [250, 3.510], [500, 8.120], [750, 13.220], 
+    [1000, 18.610], [1500, 29.980], [2000, 34.120], [2315, 37.070]
+  ]
+};
+
+function interpolate(val, table, xCol, yCol) {
+  if (val < table[0][xCol]) return "LOW";
+  if (val > table[table.length-1][xCol]) return "HIGH";
+  
+  for (let i = 0; i < table.length - 1; i++) {
+    const [x0, y0] = [table[i][xCol], table[i][yCol]];
+    const [x1, y1] = [table[i+1][xCol], table[i+1][yCol]];
+    if (val >= x0 && val <= x1) {
+      return y0 + (val - x0) * (y1 - y0) / (x1 - x0);
+    }
+  }
+  return null;
+}
+
+function temp_to_mv(type, temp_c) {
+  const table = TC_TABLES[type];
+  if (!table) return 0.0;
+  const res = interpolate(temp_c, table, 0, 1);
+  return typeof res === "number" ? res : 0.0;
+}
+
+function mv_to_temp(type, mv) {
+  const table = TC_TABLES[type];
+  if (!table) return null;
+  return interpolate(mv, table, 1, 0);
+}
+
+// ── TC3 Diagnostics State ──────────────────────────────────
+let _tc3Last = { mv: null, t: null, time: 0 };
+
+function convertTC(id, mv, type, cjc_temp_c = 0.0) {
+  if (mv === null || mv === undefined || isNaN(mv)) return { val: null, msg: "Missing Data" };
+  if (Math.abs(mv) > 70) return { val: null, msg: "Open Chan" };
+  if (type === "RAW") return { val: mv, msg: null };
+
+  const mv_cjc = temp_to_mv(type, cjc_temp_c);
+  const total_mv = mv + mv_cjc;
+  const temp = mv_to_temp(type, total_mv);
+
+  // Requirement 2 & 3: Throttled TC3 Diagnostics (~1Hz)
+  if (id === "temp_2") {
+    const now = Date.now();
+    if (now - _tc3Last.time > 1000) {
+      const deltaRef = (typeof temp === "number") ? (temp - 9.978) : null;
+      
+      // Requirement 4: Monotonicity check
+      let mono = "N/A";
+      if (_tc3Last.mv !== null && _tc3Last.t !== null && typeof temp === "number") {
+        const mvInc = mv > _tc3Last.mv;
+        const tInc = temp > _tc3Last.t;
+        const mvDec = mv < _tc3Last.mv;
+        const tDec = temp < _tc3Last.t;
+        if ((mvInc && tInc) || (mvDec && tDec) || (mv === _tc3Last.mv)) {
+          mono = "PASS";
+        } else {
+          mono = "FAIL (Inverted Response!)";
+        }
+      }
+
+      console.groupCollapsed(`[TC3-DIAG] @ ${new Date().toLocaleTimeString()} - ${temp?.toFixed(2)}°C`);
+      console.log(`raw_mv:     ${mv.toFixed(4)} mV`);
+      console.log(`cjc_t:      ${cjc_temp_c.toFixed(2)} °C`);
+      console.log(`cjc_mv:     ${mv_cjc.toFixed(4)} mV`);
+      console.log(`total_mv:   ${total_mv.toFixed(4)} mV`);
+      console.log(`calc_temp:  ${temp?.toFixed(3)} °C`);
+      console.log(`delta_ref:  ${deltaRef?.toFixed(3)} °C (vs 9.978)`);
+      console.log(`monotonic:  ${mono} (prev_mv:${_tc3Last.mv?.toFixed(4)} -> curr_mv:${mv.toFixed(4)})`);
+      
+      // Requirement 5: Sanity Check Warning
+      if (Math.abs(mv) < 1.0 && typeof temp === "number") {
+        if (Math.abs(temp - cjc_temp_c) > 10.0) {
+          console.warn("WARNING: Large deviation between TC and CJC (>10°C) — check wiring/polarity!");
+        }
+      }
+      console.groupEnd();
+
+      _tc3Last = { mv, t: temp, time: now };
+    }
+  }
+
+  if (temp === "LOW") return { val: null, msg: "Range Low" };
+  if (temp === "HIGH") return { val: null, msg: "Range High" };
+  if (temp === null) return { val: null, msg: "Conv Fail" };
+  
+  return { val: temp, msg: null };
+}
+
+window.saveTCPreference = (chan, type) => {
+  S.tcPrefs[chan] = type;
+  localStorage.setItem("tc_prefs", JSON.stringify(S.tcPrefs));
+  syncChartLabels();
+};
+
+window.saveCjcOverride = (val) => {
+  S.cjcManualVal = parseFloat(val);
+  S.cjcMode = "manual";
+  localStorage.setItem("cjc_val", S.cjcManualVal);
+  localStorage.setItem("cjc_mode", S.cjcMode);
+};
+
+window.toggleCjcAuto = () => {
+  S.cjcMode = "auto";
+  localStorage.setItem("cjc_mode", S.cjcMode);
+};
+
+function syncChartLabels() {
+  if (!_chart) return;
+  _chart.data.datasets.forEach(ds => {
+    if (ds._key && ds._key.startsWith("crio_temp_")) {
+      const idx = ds._key.split("_").pop();
+      const chanId = `temp_${idx}`;
+      const type = S.tcPrefs[chanId] || "K";
+      const baseLabel = `cRIO Temp ${parseInt(idx)+1}`;
+      ds.label = type === "RAW" ? `${baseLabel} (Raw mV)` : `${baseLabel} (Type ${type})`;
+    }
+  });
+  _chart.update("none");
+}
 
 // ── Clock ──────────────────────────────────────────────────
 setInterval(() => { el("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }); }, 1000);
@@ -39,9 +205,9 @@ const socket = io({ transports: ["websocket", "polling"] });
 socket.on("connect", () => { el("conn-dot").className = "status-dot connected"; el("conn-label").textContent = "Connected"; appendLog("⚡ Connected.", "log-info"); });
 socket.on("disconnect", () => { el("conn-dot").className = "status-dot disconnected"; el("conn-label").textContent = "Disconnected"; appendLog("✖ Disconnected.", "log-error"); });
 socket.on("status_update", data => {
-  if (data.crio) updateCrioUI(data.crio);
-  if (data.duet) updateDuetUI(data.duet);
-  if (data.furnace) updateFurnaceUI(data.furnace);
+  if (data.crio) { updateCrioUI(data.crio); triggerHB("crio", "rx"); }
+  if (data.duet) { updateDuetUI(data.duet); triggerHB("duet", "rx"); }
+  if (data.furnace) { updateFurnaceUI(data.furnace); triggerHB("furnace", "rx"); }
   if (data.traffic) updateTrafficLight(data.traffic);
   if (data.furnace) _appendChartPoint(data.furnace, data.crio);
   // Live position → visualizer
@@ -80,24 +246,56 @@ function setFurnaceTab(mode) {
   el("tab-btn-prog").classList.toggle("active", mode === 1);
   
   // Sync mode to backend
+  triggerHB("furnace", "tx");
   post("/api/furnace/mode", { mode: mode });
 }
 
 // ── cRIO UI ─────────────────────────────────────────────────
 function updateCrioUI(data) {
+  console.log("[CRIO] UI Update:", data);
   const badge = el("crio-status-badge");
-  badge.textContent = window.PCFG.mockMode ? "MOCK" : (data.error ? "ERROR" : "OK");
-  badge.className = "conn-badge " + (window.PCFG.mockMode ? "mock" : data.error ? "error" : "ok");
+  const isConn = data.connected;
+  badge.textContent = isConn ? (data.error ? "ERROR" : "OK") : "OFFLINE";
+  badge.className = "conn-badge " + (isConn ? (data.error ? "error" : "ok") : "error");
+
+  // CJC Determination
+  let cjcVal = 22.0;
+  let cjcSource = "Default";
+  
+  if (S.cjcMode === "manual") {
+    cjcVal = S.cjcManualVal;
+    cjcSource = "Manual";
+  } else {
+    // Look for hardware CJC in various possible keys
+    const hwCjc = data.cjc_temp_c ?? data.cjc ?? data.mod2_cjc;
+    if (hwCjc !== undefined && hwCjc !== null) {
+      cjcVal = hwCjc;
+      cjcSource = data.cjc_source || "Hardware";
+    } else {
+      cjcVal = 22.0;
+      cjcSource = "Default";
+    }
+  }
+  S.currentCjc = cjcVal;
+
+  // Update CJC UI
+  if (el("cjc-val")) el("cjc-val").textContent = cjcVal.toFixed(1);
+  if (el("cjc-source")) el("cjc-source").textContent = cjcSource;
+  if (el("cjc-override")) el("cjc-override").value = S.cjcManualVal;
+  if (el("cjc-auto-btn")) {
+    el("cjc-auto-btn").style.background = S.cjcMode === "auto" ? "var(--purple)" : "var(--surface3)";
+    el("cjc-auto-btn").style.color = S.cjcMode === "auto" ? "white" : "var(--muted)";
+  }
+
+  if (el("crio-ts")) el("crio-ts").textContent = data.timestamp || "---";
+  if (el("crio-seq")) el("crio-seq").textContent = data.sequence || "---";
 
   if (data.relays) {
     for (const [id, on] of Object.entries(data.relays)) {
       const cb = document.querySelector(`.relay-cb[data-channel="${id}"]`);
       const item = el(`relay-${id}`);
-      
-      // Sync logic: respect a 1-second "user intent" period after clicking
       const now = Date.now();
       const inCooldown = cb && cb._lastClick && (now - cb._lastClick < 1000);
-      
       if (cb && !inCooldown) { 
         cb.checked = on; 
         item?.classList.toggle("active", on); 
@@ -105,49 +303,77 @@ function updateCrioUI(data) {
     }
   }
   
+  const m4 = el("mod4-summary");
+  if (m4 && data.mod4) {
+    const v = (data.mod4.volt || []).map(x => x.toFixed(2) + "V").join(", ");
+    const i = (data.mod4.curr || []).map(x => x.toFixed(2) + "mA").join(", ");
+    m4.textContent = `U: [${v}] | I: [${i}]`;
+  }
+
+  const pi = data.pyro_info || {};
+  const pyroErr = el("pyro-error-msg");
+  const pyroBadge = el("pyro-status-badge");
+  const verifyBadge = el("pyro-verify-badge");
+
+  if (pyroErr) pyroErr.classList.toggle("active", !pi.connected);
+  if (pyroBadge) {
+      pyroBadge.textContent = pi.connected ? "ONLINE" : "OFFLINE";
+      pyroBadge.className = "badge " + (pi.connected ? "conn-badge ok" : "conn-badge error");
+  }
+  if (verifyBadge) {
+      const verified = pi.emissivity_verified;
+      verifyBadge.textContent = verified ? "VERIFIED" : "UNVERIFIED";
+      verifyBadge.style.backgroundColor = verified ? "var(--green)" : "#666";
+  }
+
   if (data.temperatures) {
-    const pyroVal = data.temperatures["temp_pyro"];
-    const pyroErr = el("pyro-error-msg");
-    const pyroBadge = el("pyro-status-badge");
+    for (const [id, rawMv] of Object.entries(data.temperatures)) {
+      const vEl = el(`tempval-${id}`); 
+      const bEl = el(`tempbar-${id}`);
+      const rEl = el(`tempraw-${id}`);
+      const uEl = el(`tempunit-${id}`);
+      const sEl = el(`tc-type-${id}`);
 
-    // Check for "No data" - if key doesn't exist or is exactly null/undefined
-    const hasData = (pyroVal !== undefined && pyroVal !== null);
-    if (pyroErr) pyroErr.classList.toggle("active", !hasData);
-    if (pyroBadge) {
-        pyroBadge.textContent = hasData ? (pyroVal === -1.0 ? "WARMING" : "ACTIVE") : "OFFLINE";
-        pyroBadge.className = "badge " + (hasData ? (pyroVal === -1.0 ? "badge-mock" : "conn-badge ok") : "conn-badge error");
-    }
-
-    for (const [id, val] of Object.entries(data.temperatures)) {
-      const v = el(`tempval-${id}`); const b = el(`tempbar-${id}`);
-      if (v) {
-        if (id === "temp_pyro" && val === -1.0) {
-          v.textContent = "Warming...";
-          v.classList.add("warming-text");
+      if (vEl) {
+        if (id === "temp_pyro" && rawMv === -1.0) {
+          vEl.textContent = "Warming...";
+          vEl.classList.add("warming-text");
+        } else if (id === "temp_pyro") {
+          vEl.textContent = fmt(rawMv);
+          vEl.classList.remove("warming-text");
         } else {
-          v.textContent = fmt(val);
-          v.classList.remove("warming-text");
+          const tcType = S.tcPrefs[id] || "K";
+          if (sEl && sEl.value !== tcType) sEl.value = tcType; 
+
+          const res = convertTC(id, rawMv, tcType, S.currentCjc);
+          vEl.textContent = (res.val !== null && !isNaN(res.val)) ? fmt(res.val, 1) : (res.msg || "---");
+          if (uEl) uEl.textContent = tcType === "RAW" ? "mV" : "°C";
+          if (rEl) rEl.textContent = (rawMv !== null && !isNaN(rawMv)) ? rawMv.toFixed(4) + " mV" : "---";
+          
+          if (bEl) {
+            const barVal = (res.val !== null && !isNaN(res.val)) ? res.val : 0;
+            const maxVal = tcType === "RAW" ? 50 : 1500;
+            bEl.style.width = Math.min(100, Math.max(0, barVal / maxVal * 100)).toFixed(1) + "%";
+          }
         }
-      }
-      if (b) {
-        const barVal = (id === "temp_pyro" && val === -1.0) ? 0 : parseFloat(val);
-        const maxVal = id === "temp_pyro" ? 1600 : 500;
-        b.style.width = Math.min(100, Math.max(0, barVal / maxVal * 100)).toFixed(1) + "%";
       }
     }
   }
 }
 
 async function setEmissivity(value) {
+  console.log(`[CRIO] Setting emissivity to ${value}%`);
+  triggerHB("crio", "tx");
   const d = await post("/api/crio/emissivity", { value: parseInt(value) });
+  console.log(`[CRIO] Emissivity response:`, d);
   if (!d.ok) appendLog(`✖ Emissivity failed: ${d.error}`, "log-error");
 }
 
 // ── Duet UI ─────────────────────────────────────────────────
 function updateDuetUI(data) {
   const badge = el("duet-status-badge");
-  badge.textContent = window.PCFG.mockMode ? "MOCK" : (data.error ? "OFFLINE" : "OK");
-  badge.className = "conn-badge " + (window.PCFG.mockMode ? "mock" : data.error ? "error" : "ok");
+  badge.textContent = data.error ? "OFFLINE" : "OK";
+  badge.className = "conn-badge " + (data.error ? "error" : "ok");
 
   const st = data.state || "—";
   const stBadge = el("wf-state-badge");
@@ -192,8 +418,8 @@ function updateWorkflowUI({ state: wf, loop_count }) {
 // ── Furnace UI ──────────────────────────────────────────────
 function updateFurnaceUI(data) {
   const badge = el("furnace-status-badge");
-  badge.textContent = window.PCFG.mockMode ? "MOCK" : (data.error ? "ERROR" : "OK");
-  badge.className = "conn-badge " + (window.PCFG.mockMode ? "mock" : data.error ? "error" : "ok");
+  badge.textContent = data.error ? "ERROR" : "OK";
+  badge.className = "conn-badge " + (data.error ? "error" : "ok");
 
   // Gauge
   const actual = parseFloat(data.actual ?? 0);
@@ -318,10 +544,13 @@ function updateFurnaceUI(data) {
 
 // ── Relay toggle ────────────────────────────────────────────
 async function toggleRelay(channelId, newState) {
+  console.log(`[CRIO] Toggling relay ${channelId} to ${newState}`);
+  triggerHB("crio", "tx");
   const cb = document.querySelector(`.relay-cb[data-channel="${channelId}"]`);
   if (cb) cb._lastClick = Date.now(); // Start cooldown
   
   const d = await post(`/api/crio/relay/${channelId}`, { state: newState });
+  console.log(`[CRIO] Relay response:`, d);
   if (!d.ok && cb) {
       cb.checked = !newState;
       cb._lastClick = 0; // Reset cooldown on error so status update can fix it
@@ -333,6 +562,7 @@ async function toggleRelay(channelId, newState) {
 // ── GCode terminal ──────────────────────────────────────────
 async function sendGcode() {
   const input = el("gcode-input"); const cmd = input.value.trim(); if (!cmd) return;
+  triggerHB("duet", "tx");
   appendLog(`>> ${cmd}`, "log-send"); input.value = "";
   const d = await post("/api/duet/gcode", { command: cmd });
   appendLog(d.ok ? `<< ${d.response || "(ok)"}` : `✖ ${d.error || "error"}`, d.ok ? "log-recv" : "log-error");
@@ -383,6 +613,7 @@ let _manualTimer = null;
     syncManual();
     clearTimeout(_manualTimer);
     _manualTimer = setTimeout(() => {
+      triggerHB("furnace", "tx");
       post("/api/furnace/manual", {
         power_pct: parseFloat(el("pwr-slider").value),
         current_pct: parseFloat(el("cur-slider").value),
@@ -398,6 +629,7 @@ async function hpLoad() {
   S.progNo = n;
   
   // Update Backend selection
+  triggerHB("furnace", "tx");
   const resp = await post("/api/furnace/program/select", { prog_no: n });
   if (!resp.ok) {
      appendLog(`✖ Selection Failed: ${resp.error}`, "log-error");
@@ -418,10 +650,11 @@ async function hpLoad() {
 }
 
 async function toggleFurnace() { 
+  triggerHB("furnace", "tx");
   await post("/api/furnace/enable", { enable: !S.furnaceEnabled }); 
 }
-async function furnaceAckError() { await post("/api/furnace/ack_error"); appendLog("⚡ ACK Error.", "log-info"); }
-async function furnaceResetEnergy() { await post("/api/furnace/reset_energy"); appendLog("⚡ Energy reset.", "log-info"); }
+async function furnaceAckError() { triggerHB("furnace", "tx"); await post("/api/furnace/ack_error"); appendLog("⚡ ACK Error.", "log-info"); }
+async function furnaceResetEnergy() { triggerHB("furnace", "tx"); await post("/api/furnace/reset_energy"); appendLog("⚡ Energy reset.", "log-info"); }
 
 // ── Heating Program Modal ────────────────────────────────────
 function openProgModal() {
@@ -450,6 +683,7 @@ async function hpWrite() {
   const n = parseInt(el("prog-select").value) || 1;
   const phases = _readHpTable();
   const ps = el("prog-status"); if (ps) { ps.textContent = "Writing…"; ps.className = "prog-status"; }
+  triggerHB("furnace", "tx");
   const d = await post(`/api/furnace/program/${n}`, { phases });
   if (ps) { ps.textContent = d.ok ? `✔ Program ${n} written` : "✖ " + d.error; ps.className = "prog-status " + (d.ok ? "ok" : "err"); }
   if (d.ok) S.currentProgram = phases;
@@ -542,11 +776,6 @@ function closeErrModal() { el("err-modal").style.display = "none"; }
 // ── Protocol Inspector Modal ────────────────────────────────
 let _protoTimer = null;
 
-function openProtoModal() {
-  el("proto-modal").style.display = "flex";
-  fetchRawPackets();
-  _protoTimer = setInterval(fetchRawPackets, 500);
-}
 
 function closeProtoModal() {
   el("proto-modal").style.display = "none";
@@ -567,11 +796,14 @@ function closeProtoModal() {
   window.fetchCrioRawData = async function() {
     try {
       const modal = el("crio-proto-modal");
-      if (modal) modal.style.display = "flex";
+      if (!modal || modal.style.display === "none") return;
+      
       const data = await get("/api/crio/raw_data");
       
       const txBox = el("crio-tx-dump");
       const rxBox = el("crio-rx-dump");
+      const telemetryBox = el("crio-telemetry-dump");
+
       if (txBox) {
           const parsed = JSON.parse(data.tx || "{}");
           txBox.innerHTML = `<pre style="color:var(--purple); font-size:11px; padding:10px;">${JSON.stringify(parsed, null, 2)}</pre>`;
@@ -580,14 +812,105 @@ function closeProtoModal() {
           const parsed = JSON.parse(data.rx || "{}");
           rxBox.innerHTML = `<pre style="color:var(--blue); font-size:11px; padding:10px;">${JSON.stringify(parsed, null, 2)}</pre>`;
       }
+      if (telemetryBox) {
+          telemetryBox.innerHTML = `<pre style="color:var(--green); font-size:11px; padding:10px;">${JSON.stringify(data.telemetry || {}, null, 2)}</pre>`;
+      }
+
+      const hbStatus = el("crio-hb-status");
+      if (hbStatus && data.heartbeat_tx) {
+          hbStatus.textContent = `OK (${data.heartbeat_tx.substring(0, 20)}...)`;
+      }
+
+      // Auto-refresh logic if visible
+      clearTimeout(window._crioProtoTimer);
+      window._crioProtoTimer = setTimeout(window.fetchCrioRawData, 1000);
     } catch (e) { console.error("cRIO Inspector fetch failed:", e); }
   }
+
+  window.openCrioInspector = function() {
+      el("crio-proto-modal").style.display = "flex";
+      window.fetchCrioRawData();
+  };
+
+  window.closeCrioInspector = function() {
+      el("crio-proto-modal").style.display = "none";
+      clearTimeout(window._crioProtoTimer);
+  };
   
   window.fetchRawPackets = fetchRawPackets;
   window.openProtoModal = () => {
     el("proto-modal").style.display = "flex";
-    el("proto-title-main").textContent = "Furnace Protocol Inspector (Binary)";
     fetchRawPackets();
+    if (_protoTimer) clearInterval(_protoTimer);
+    _protoTimer = setInterval(fetchRawPackets, 500);
+  };
+
+  // ── Service Console (Port 4661) ───────────────────────────
+  let _consoleTimer = null;
+  let _lastConsoleLineCount = 0;
+
+  window.openConsoleModal = () => {
+    el("console-modal").style.display = "flex";
+    fetchConsoleLogs();
+    if (_consoleTimer) clearInterval(_consoleTimer);
+    _consoleTimer = setInterval(fetchConsoleLogs, 1000);
+  };
+
+  window.closeConsoleModal = () => {
+    el("console-modal").style.display = "none";
+    clearInterval(_consoleTimer);
+  };
+
+  window.clearConsole = () => {
+    el("console-output").innerHTML = "";
+    _lastConsoleLineCount = 0;
+  };
+
+  async function fetchConsoleLogs() {
+    try {
+      const data = await get("/api/furnace/console");
+      const logs = data.logs || [];
+      const out = el("console-output");
+      if (!out) return;
+
+      // Only append new lines
+      if (logs.length > _lastConsoleLineCount) {
+        const newLines = logs.slice(_lastConsoleLineCount);
+        newLines.forEach(line => {
+          const div = document.createElement("div");
+          div.className = "console-line";
+          div.textContent = line;
+          out.appendChild(div);
+        });
+        _lastConsoleLineCount = logs.length;
+        out.scrollTop = out.scrollHeight; // Auto-scroll
+      }
+
+      const dot = el("console-refresh-dot");
+      if (dot) { dot.style.opacity = "0.3"; setTimeout(() => { if(dot) dot.style.opacity = "1"; }, 200); }
+    } catch (e) { console.warn("Console fetch failed:", e); }
+  }
+
+  window.sendConsoleCommand = async () => {
+    const inp = el("console-input");
+    const cmd = inp.value.trim();
+    if (!cmd) return;
+    try {
+      await post("/api/furnace/console/command", { command: cmd });
+      inp.value = "";
+      // Append local indicator
+      const div = document.createElement("div");
+      div.className = "console-line console-sent";
+      div.textContent = `> ${cmd}`;
+      el("console-output").appendChild(div);
+      el("console-output").scrollTop = el("console-output").scrollHeight;
+    } catch (e) { appendLog(`Console send failed: ${e}`, "log-error"); }
+  };
+
+  window.sendConsoleFixed = (cmd) => {
+    const inp = el("console-input");
+    if (inp) inp.value = cmd;
+    sendConsoleCommand();
   };
 
   // Field palette — maps field index → CSS class
@@ -886,6 +1209,21 @@ async function fetchHistory() {
 function _appendChartPoint(furnaceData, crioData) {
   if (!_chart) return;
   const now = Date.now();
+  
+  // Convert cRIO temps before storage
+  const convertedTemps = {};
+  if (crioData && crioData.temperatures) {
+    for (const [id, rawMv] of Object.entries(crioData.temperatures)) {
+      if (id === "temp_pyro") {
+        convertedTemps[id] = rawMv;
+      } else {
+        const tcType = S.tcPrefs[id] || "K";
+        const res = convertTC(id, rawMv, tcType, S.currentCjc);
+        convertedTemps[id] = res.val;
+      }
+    }
+  }
+
   const s = {
     t: now / 1000,
     temp: furnaceData.actual,
@@ -896,7 +1234,7 @@ function _appendChartPoint(furnaceData, crioData) {
     energy: furnaceData.actual_energy,
     cap_v: furnaceData.cap_voltage,
     dc_v: furnaceData.dc_voltage,
-    crio_temps: crioData?.temperatures || {},
+    crio_temps: convertedTemps,
   };
   _chartData.push(s);
 
@@ -968,14 +1306,14 @@ function downloadCSV() {
 
 // ── Init ───────────────────────────────────────────────────
 appendLog("Process Control GUI ready.", "log-info");
-if (window.PCFG?.mockMode) appendLog("⚠ MOCK MODE active.", "log-info");
-// Set initial manual controls visible
+// Initialise chart after DOM is ready
 el("manual-controls").style.display = "flex";
 el("auto-controls").style.display = "none";
 
 // Initialise chart after DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
   initChart();
+  syncChartLabels(); // Apply stored TC types to labels
   fetchHistory();
   initViz();
   loadGcodeEditors();

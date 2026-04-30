@@ -1,21 +1,14 @@
-# =============================================================================
-# config.py  —  Central configuration for all hardware connections
-# Edit this file to match your network and hardware setup.
-# =============================================================================
-
-# ---------------------------------------------------------------------------
-# Global mock mode
-# Set MOCK = True to run the GUI without any real hardware connected.
-# ---------------------------------------------------------------------------
-MOCK = False
+# Global mode: Real hardware only
 
 # ---------------------------------------------------------------------------
 # NI cRIO
 # The cRIO must run a LabVIEW RT TCP server — see docs/crio_protocol.md
 # ---------------------------------------------------------------------------
-CRIO_IP      = "192.168.137.109"
+CRIO_IP      = "192.168.137.100"
 CRIO_PORT    = 5020
+CRIO_UDP_PORT = 5021
 CRIO_TIMEOUT = 2.0
+CRIO_WATCHDOG_INTERVAL = 1.5
 
 # Relay channel definitions  {display_name: cRIO_channel_id}
 RELAY_CHANNELS = {

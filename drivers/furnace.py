@@ -175,13 +175,6 @@ _last_prog_done = False
 _ctrl["setpoint_c"] = 0.0    # °C — for mock sim + display
 
 _status = {
-    "ready":          False,
-    "active":         False,
-    "error":          False,
-    "estop":          False,
-    "prog_done":      False,
-    "prog_error":     False,
-    "fsm_state":      "Unknown",
     "actual_temp":    0.0,
     "actual":         0.0,
     "actual_power":   0.0,
@@ -192,8 +185,15 @@ _status = {
     "dc_voltage":     0.0,
     "actual_energy":  0.0,
     "water_flow":     0.0,
+    "fsm_state":      "Init",
+    "ready":          False,
+    "active":         False,
+    "estop":          False,
+    "prog_done":      False,
+    "prog_error":     False,
+    "heartbeat":      False,
     "error_word":     0,
-    "error_bits":     [],   # list of {"bit": n, "name": "..."}
+    "error_bits":     [],
     "status_word":    0,
     "last_error_msg": None,
     "heating_program": 0,
@@ -209,9 +209,51 @@ _programs: dict[int, list[dict]] = {}
 def _empty_program(prog_no: int) -> list[dict]:
     return [_default_phase(i) for i in range(config.FURNACE_NUM_PHASES)]
 
-# Last raw TX / RX bytes for the protocol inspector
 _last_tx_bytes: bytes = b"\x00" * 28
 _last_rx_bytes: bytes = b"\x00" * INPUT_PACKET_SIZE  # 132 bytes
+
+# Console buffer (Service 4661)
+_console_logs = []
+_console_lock = threading.Lock()
+_console_started = False
+
+def _console_loop():
+    """Background thread to listen for console messages on port 4661."""
+    global _console_logs
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(2.0)
+    
+    # Bind to physical interface if specified
+    host_ip = getattr(config, "HOST_IP", "")
+    try:
+        sock.bind((host_ip, 0)) # OS picks a free source port
+    except Exception as e:
+        print(f"[furnace console] Could not bind: {e}")
+        sock.bind(("", 0))
+
+    # Initiate session
+    dest = (config.FURNACE_IP, getattr(config, "FURNACE_CONSOLE_PORT", 4661))
+    print(f"[furnace console] Session starting on port {dest[1]}...")
+    sock.sendto(b"HELLO", dest)
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(4096)
+            msg = data.decode("ascii", errors="replace").strip()
+            if msg:
+                timestamp = time.strftime("%H:%M:%S")
+                with _console_lock:
+                    _console_logs.append(f"[{timestamp}] {msg}")
+                    # Keep last 500 lines
+                    if len(_console_logs) > 500:
+                        _console_logs.pop(0)
+        except socket.timeout:
+            # Re-ping if it goes quiet? Manual says "activates", but let's be safe
+            # Actually, just keep waiting. If we want to restart, we can send another HELLO.
+            pass
+        except Exception as e:
+            print(f"[furnace console] Error: {e}")
+            time.sleep(1.0)
 
 # ─────────────────────────────────────────────────────────────
 # Packet builders / parsers
@@ -408,45 +450,6 @@ def _service_send_recv(pkt: bytes) -> bytes | None:
 # ─────────────────────────────────────────────────────────────
 # Mock RX packet builder (for inspector in mock mode)
 # ─────────────────────────────────────────────────────────────
-def _build_mock_rx_packet(st: dict) -> bytes:
-    """Build a plausible 132-byte ICC→PLC status packet from _status (per CSV spec)."""
-    sw = 0
-    if st.get("ready"):     sw |= SBIT_READY
-    if st.get("active"):    sw |= SBIT_ACTIVE
-    if st.get("error"):     sw |= SBIT_ERROR
-    if st.get("estop"):     sw |= SBIT_ESTOP
-    if st.get("prog_done"): sw |= SBIT_PROG_DONE
-    if st.get("prog_error"):sw |= SBIT_PROG_ERR
-
-    fsm_rev = {v: k for k, v in FSM_STATES.items()}
-    fsm_raw = fsm_rev.get(st.get("fsm_state", "Ready"), 9)
-
-    pkt  = PREFIX                                              # bytes 0-7
-    pkt += struct.pack(">H", sw)                              # bytes 8-9   status_word
-    pkt += struct.pack(">H", 0)                               # bytes 10-11 process_status
-    pkt += struct.pack(">f", float(st.get("actual_current", 0))) # bytes 12-15 primary_current
-    pkt += struct.pack(">f", float(st.get("phase_angle", 0)))    # bytes 16-19 phase_angle
-    pkt += struct.pack(">f", float(st.get("actual_freq",  0)))   # bytes 20-23 frequency
-    pkt += struct.pack(">f", float(st.get("actual_power", 0)))   # bytes 24-27 power
-    pkt += struct.pack(">f", float(st.get("cap_voltage",  0)))   # bytes 28-31 cap_voltage
-    pkt += struct.pack(">f", float(st.get("dc_voltage",   0)))   # bytes 32-35 dc_link
-    pkt += struct.pack(">f", float(st.get("actual_energy",0)))   # bytes 36-39 energy
-    pkt += struct.pack(">f", float(st.get("water_flow",   0)))   # bytes 40-43 flow
-    pkt += struct.pack(">h", int(st.get("actual_temp", 0)))      # bytes 44-45 temperature (int16)
-    pkt += struct.pack(">H", 0)                               # bytes 46-47 reserved1
-    pkt += struct.pack(">H", 0)                               # bytes 48-49 program
-    pkt += struct.pack(">H", 0)                               # bytes 50-51 phase
-    pkt += struct.pack(">I", fsm_raw)                         # bytes 52-55 fsm (uint32)
-    pkt += struct.pack(">I", int(st.get("error_word", 0)))    # bytes 56-59 error_word
-    # reserved2: 64 bytes at offset 60
-    pad_len = 124 - len(pkt)
-    pkt += b"\x00" * pad_len                                  # bytes 60-123 reserved2
-    pkt += SUFFIX                                              # bytes 124-131
-    # Safety: ensure exactly INPUT_PACKET_SIZE bytes
-    if len(pkt) < INPUT_PACKET_SIZE:
-        pkt += b"\x00" * (INPUT_PACKET_SIZE - len(pkt))
-    return pkt[:INPUT_PACKET_SIZE]
-
 # ─────────────────────────────────────────────────────────────
 # Background IO loops
 # ─────────────────────────────────────────────────────────────
@@ -503,41 +506,6 @@ def _real_io_loop():
                 _status["error"] = f"RX error: {e}"
 
 
-def _mock_loop():
-    global _last_tx_bytes, _last_rx_bytes
-    tau = 25.0
-    dt  = 0.5
-    energy_acc = 0.0
-    while True:
-        time.sleep(dt)
-        with _lock:
-            sp     = _ctrl["setpoint_c"] if _ctrl["heating_on"] else 25.0
-            actual = _status["actual_temp"]
-            new_t  = actual + (sp - actual) * (dt / tau) + random.gauss(0, 0.1)
-            new_t  = round(max(20.0, new_t), 2)
-            pwr    = round(max(0.0, abs(sp - actual) * 2.8 + random.gauss(0, 0.5)), 1) if _ctrl["heating_on"] else 0.0
-            energy_acc += pwr * dt
-            _status.update({
-                "actual_temp":    new_t,
-                "actual_power":   pwr,
-                "actual_current": round(pwr / 230.0, 2),
-                "actual_freq":    round(62000 + random.gauss(0, 20), 0),
-                "cap_voltage":    round(random.gauss(340, 2), 1),
-                "dc_voltage":     round(random.gauss(560, 3), 1),
-                "actual_energy":  round(energy_acc, 0),
-                "water_flow":     round(3.2 + random.gauss(0, 0.04), 2),
-                "ready":          True,
-                "active":         _ctrl["heating_on"],
-                "fsm_state":      "Active" if _ctrl["heating_on"] else "Ready",
-                "error":          None,
-                "error_word":     0,
-                "error_bits":     [],
-            })
-            # Update mock TX bytes
-            _last_tx_bytes = _build_output_packet(_ctrl, False)
-            # Build a plausible mock RX packet from current _status
-            _last_rx_bytes = _build_mock_rx_packet(_status)
-
 # ─────────────────────────────────────────────────────────────
 # Start background thread
 # ─────────────────────────────────────────────────────────────
@@ -548,11 +516,9 @@ import os
 _is_reloader_child = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
 
 if _is_reloader_child:
-    # This is the Flask reloader child process - start the IO thread
-    if config.MOCK:
-        threading.Thread(target=_mock_loop, daemon=True).start()
-    else:
-        threading.Thread(target=_real_io_loop, daemon=True).start()
+    # This is the Flask reloader child process - start the IO threads
+    threading.Thread(target=_real_io_loop, daemon=True).start()
+    threading.Thread(target=_console_loop, daemon=True).start()
 
 # ─────────────────────────────────────────────────────────────
 # Public API — main control
@@ -683,11 +649,6 @@ def get_program(prog_no: int) -> dict:
     Returns {"ok": True, "phases": [...]} or {"ok": False, "error": "..."}
     """
     n = int(prog_no)
-    if config.MOCK:
-        with _lock:
-            if n not in _programs:
-                _programs[n] = _empty_program(n)
-            return {"ok": True, "phases": list(_programs[n])}
 
     pkt  = _build_get_heatprog(n)
     resp = _service_send_recv(pkt)
@@ -711,9 +672,6 @@ def set_program(prog_no: int, phases: list[dict]) -> dict:
 
     with _lock:
         _programs[n] = phases
-
-    if config.MOCK:
-        return {"ok": True}
 
     pkt  = _build_set_heatprog(n, phases)
     resp = _service_send_recv(pkt)
@@ -916,4 +874,28 @@ def get_raw_packets() -> dict:
         "tx": {"bytes": list(tx), "fields": tx_fields,  "total": len(tx)},
         "rx": {"bytes": list(rx), "fields": rx_fields, "total": len(rx)},
     }
+
+
+def get_console_logs() -> list:
+    """Return the buffered console text lines."""
+    with _console_lock:
+        return list(_console_logs)
+
+
+def send_console_command(cmd: str) -> bool:
+    """Send a custom command string to the console port."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Use a short-lived socket for one-off commands
+        host_ip = getattr(config, "HOST_IP", "")
+        try:
+            sock.bind((host_ip, 0))
+        except:
+            sock.bind(("", 0))
+        sock.sendto(cmd.encode("ascii"), (config.FURNACE_IP, getattr(config, "FURNACE_CONSOLE_PORT", 4661)))
+        sock.close()
+        return True
+    except Exception as e:
+        print(f"[furnace console] Send error: {e}")
+        return False
 

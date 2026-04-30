@@ -72,8 +72,6 @@ def _base_url() -> str:
     return f"http://{config.DUET_IP}"
 
 def _send_code(cmd: str) -> dict:
-    if config.MOCK:
-        return _mock_gcode(cmd)
     if not _HAS_REQUESTS:
         return {"ok": False, "response": "", "error": "requests not installed"}
     try:
@@ -88,8 +86,6 @@ def _send_code(cmd: str) -> dict:
         return {"ok": False, "response": "", "error": str(e)}
 
 def _get_machine_status() -> dict:
-    if config.MOCK:
-        return _mock_status()
     if not _HAS_REQUESTS:
         return {"error": "requests not installed"}
     try:
@@ -129,8 +125,7 @@ def _send_gcode_text(gcode_text: str) -> list[dict]:
             continue
         result = _send_code(line)
         results.append({"cmd": line, **result})
-        if not config.MOCK:
-            time.sleep(0.05)
+        time.sleep(0.05)
     return results
 
 # ─────────────────────────────────────────────────────────────
@@ -148,10 +143,7 @@ def start_homing() -> dict:
         try:
             gcode = read_gcode("home")
             _send_gcode_text(gcode)
-            if not config.MOCK:
-                _wait_for_idle(timeout=120.0)
-            else:
-                time.sleep(1.5)  # mock homing delay
+            _wait_for_idle(timeout=120.0)
         finally:
             with _lock:
                 _process_state = _STATE_HOMED
@@ -171,10 +163,7 @@ def _process_loop_worker():
             break
         gcode = read_gcode("process")
         _send_gcode_text(gcode)
-        if not config.MOCK:
-            _wait_for_idle(timeout=300.0)
-        else:
-            time.sleep(2.0)   # mock process delay
+        _wait_for_idle(timeout=300.0)
         with _lock:
             _loop_count += 1
         # Check again after completing one loop
@@ -204,14 +193,12 @@ def pause_process() -> dict:
         if _process_state == _STATE_RUNNING:
             _pause_event.clear()
             _process_state = _STATE_PAUSED
-            if not config.MOCK:
-                _send_code("M25")
+            _send_code("M25")
             return {"ok": True, "state": _STATE_PAUSED}
         elif _process_state == _STATE_PAUSED:
             _pause_event.set()
             _process_state = _STATE_RUNNING
-            if not config.MOCK:
-                _send_code("M24")
+            _send_code("M24")
             return {"ok": True, "state": _STATE_RUNNING}
         return {"ok": False, "error": f"Not in running/paused state (current: '{_process_state}')"}
 
@@ -221,8 +208,7 @@ def stop_process() -> dict:
     _pause_event.set()    # unblock if paused
     with _lock:
         _process_state = _STATE_HOMED
-    if not config.MOCK:
-        _send_code("M0")  # emergency stop / halt
+    _send_code("M0")  # emergency stop / halt
     return {"ok": True, "state": _STATE_HOMED}
 
 def get_process_state() -> dict:
@@ -246,7 +232,7 @@ def get_status() -> dict:
         heaters = raw.get("heat", {}).get("heaters", [])
         temps = {}
         for i, h in enumerate(heaters):
-            name = f"tool{i}" if i < len(tools) else ("bed" if i == len(heaters) - 1 else f"h{i}")
+            name = f"tool0" if i < len(tools) else ("bed" if i == len(heaters) - 1 else f"h{i}")
             temps[name] = {"current": h.get("current", 0), "target": h.get("active", 0)}
         axes = raw.get("move", {}).get("axes", [])
         pos = {}
@@ -258,63 +244,4 @@ def get_status() -> dict:
 
 def send_gcode(command: str) -> dict:
     return _send_code(command)
-
-# ─────────────────────────────────────────────────────────────
-# Mock helpers
-# ─────────────────────────────────────────────────────────────
-_MOCK_RESPONSES = {
-    "M115": "FIRMWARE_NAME: RepRapFirmware (MOCK) ELECTRONICS: Duet 3 MB6HC",
-    "G28":  "Homing all axes (mock)",
-    "M0":   "Emergency stop (mock)",
-    "M25":  "Paused (mock)",
-    "M24":  "Resumed (mock)",
-    "M122": "=== Diagnostics === MOCK MODE",
-}
-
-def _mock_gcode(cmd: str) -> dict:
-    resp = _MOCK_RESPONSES.get(cmd.strip().upper(), f"ok (mock: {cmd})")
-    return {"ok": True, "response": resp, "error": None}
-
-import time as _time
-import random as _random
-
-_MOCK_START_TIME = _time.time()
-
-def _mock_status() -> dict:
-    # Animate position based on process state
-    t = _time.time() - _MOCK_START_TIME
-    with _lock:
-        state = _process_state
-
-    if state == _STATE_HOMING:
-        # Move from corner (0,0) toward center (135,135) over 3 seconds
-        progress = min(1.0, (t % 5.0) / 3.0)
-        mx = round(progress * 135, 2)
-        my = round(progress * 135, 2)
-    elif state == _STATE_RUNNING:
-        # Trace a circle of radius 50mm around center (135,135)
-        angle = t * 0.8   # rad/s → ~1 rev per ~8 seconds
-        import math as _math
-        mx = round(135 + 50 * _math.cos(angle), 2)
-        my = round(135 + 50 * _math.sin(angle), 2)
-    elif state == _STATE_HOMED:
-        mx, my = 135.0, 135.0
-    else:
-        # idle / paused — stay at last known or center
-        mx, my = 135.0, 135.0
-
-    return {
-        "state":  {"status": "idle"},
-        "heat":   {"heaters": [
-            {"current": round(21 + _random.gauss(0, 0.2), 2), "active": 0.0},
-            {"current": round(20 + _random.gauss(0, 0.3), 2), "active": 0.0},
-        ]},
-        "move":   {"axes": [
-            {"letter": "X", "userPosition": mx},
-            {"letter": "Y", "userPosition": my},
-            {"letter": "Z", "userPosition": 0.0},
-            {"letter": "E", "userPosition": 0.0},
-        ]},
-        "tools":  [{"name": "tool0"}],
-    }
 
