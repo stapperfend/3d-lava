@@ -370,6 +370,7 @@ def _history_logger():
             f_st = _LATEST["furnace"]
             c_st = _LATEST["crio"]
         if not f_st: continue
+        crio_temps = dict(c_st.get("temperatures", {}))
         history.append({
             "t":       time.time(),
             "temp":    _numeric_or_none(f_st.get("actual")),
@@ -382,7 +383,10 @@ def _history_logger():
             "dc_v":    f_st.get("dc_voltage"),
             "fsm":     f_st.get("fsm_state"),
             "status":  f_st.get("status_fsm_raw"),
-            "crio_temps": dict(c_st.get("temperatures", {})),
+            "crio_temps": crio_temps,
+            "crio_tc_raw_mv": {k: crio_temps.get(k) for k in ("temp_0", "temp_1", "temp_2", "temp_3")},
+            "crio_cjc_temp_c": c_st.get("cjc_temp_c"),
+            "crio_cjc_source": c_st.get("cjc_source"),
             "crio_mod4":  dict(c_st.get("mod4", {})),
         })
 

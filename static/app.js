@@ -73,12 +73,36 @@ const TC_TABLES = {
     [-200, -5.891], [-100, -3.554], [0, 0.000], [25, 1.000], [50, 2.023], 
     [100, 4.096], [250, 10.153], [500, 20.644], [750, 31.213], [1000, 41.276], [1372, 54.886]
   ],
-  // NIST Type C (W5Re/W26Re) (0 to 2315 °C)
-  C: [
-    [0, 0.000], [100, 1.107], [250, 3.510], [500, 8.120], [750, 13.220], 
-    [1000, 18.610], [1500, 29.980], [2000, 34.120], [2315, 37.070]
-  ]
 };
+
+// Type C thermocouples use this calibration table only. It maps calibrated
+// net output voltage in mV directly to temperature in deg C; it is never used
+// for Type K, RAW, pyrometer, or any other sensor conversion.
+const TYPE_C_CALIBRATION_MV_TO_C = [
+  [1.517, 100.0],
+  [3.102, 200.0],
+  [4.936, 301.0],
+  [6.789, 400.0],
+  [8.723, 500.0],
+  [10.695, 600.0],
+  [12.646, 700.0],
+  [14.555, 800.0],
+  [16.419, 900.0],
+  [18.238, 1000.0],
+  [20.012, 1100.0],
+  [21.751, 1200.0],
+  [23.413, 1300.0],
+  [25.038, 1400.0],
+  [26.607, 1500.0],
+  [28.108, 1600.0],
+  [29.549, 1700.0],
+  [30.927, 1800.0],
+  [32.228, 1900.0],
+  [33.440, 2000.0],
+  [34.716, 2100.0],
+  [35.784, 2200.0],
+  [36.782, 2300.0],
+];
 
 function interpolate(val, table, xCol, yCol) {
   if (val < table[0][xCol]) return "LOW";
@@ -102,6 +126,7 @@ function temp_to_mv(type, temp_c) {
 }
 
 function mv_to_temp(type, mv) {
+  if (type === "C") return interpolate(mv, TYPE_C_CALIBRATION_MV_TO_C, 0, 1);
   const table = TC_TABLES[type];
   if (!table) return null;
   return interpolate(mv, table, 1, 0);
@@ -115,9 +140,18 @@ function convertTC(id, mv, type, cjc_temp_c = 0.0) {
   if (Math.abs(mv) > 70) return { val: null, msg: "Open Chan" };
   if (type === "RAW") return { val: mv, msg: null };
 
-  const mv_cjc = temp_to_mv(type, cjc_temp_c);
-  const total_mv = mv + mv_cjc;
-  const temp = mv_to_temp(type, total_mv);
+  let mv_cjc = 0.0;
+  let net_mv = mv;
+  if (type === "C") {
+    // The supplied Type C table is already calibrated net output mV -> deg C.
+    // Do not use the generic CJC-offset path, and do not extrapolate outside
+    // the calibrated 1.517..36.782 mV range.
+    net_mv = mv;
+  } else {
+    mv_cjc = temp_to_mv(type, cjc_temp_c);
+    net_mv = mv + mv_cjc;
+  }
+  const temp = mv_to_temp(type, net_mv);
 
   // Requirement 2 & 3: Throttled TC3 Diagnostics (~1Hz)
   if (id === "temp_2") {
@@ -145,7 +179,7 @@ function convertTC(id, mv, type, cjc_temp_c = 0.0) {
         console.log(`raw_mv:     ${mv.toFixed(4)} mV`);
         console.log(`cjc_t:      ${cjc_temp_c.toFixed(2)} °C`);
         console.log(`cjc_mv:     ${mv_cjc.toFixed(4)} mV`);
-        console.log(`total_mv:   ${total_mv.toFixed(4)} mV`);
+        console.log(`net_mv:     ${net_mv.toFixed(4)} mV`);
         console.log(`calc_temp:  ${isNum ? temp.toFixed(3) : temp} °C`);
         console.log(`delta_ref:  ${isNum ? deltaRef?.toFixed(3) : "N/A"} °C (vs 9.978)`);
         console.log(`monotonic:  ${mono} (prev_mv:${_tc3Last.mv?.toFixed(4)} -> curr_mv:${mv.toFixed(4)})`);
@@ -167,13 +201,15 @@ function convertTC(id, mv, type, cjc_temp_c = 0.0) {
   if (temp === "HIGH") return { val: null, msg: "Range High" };
   if (temp === null) return { val: null, msg: "Conv Fail" };
   
-  return { val: temp, msg: null };
+  return { val: temp, msg: null, raw_mv: mv, net_mv };
 }
 
 window.saveTCPreference = (chan, type) => {
   S.tcPrefs[chan] = type;
   localStorage.setItem("tc_prefs", JSON.stringify(S.tcPrefs));
+  _chartData = _chartData.map(normalizeHistorySample);
   syncChartLabels();
+  _samplesToDatasets(_chartData);
 };
 
 window.saveCjcOverride = (val) => {
@@ -196,13 +232,43 @@ function syncChartLabels() {
       const chanId = `temp_${idx}`;
       const type = S.tcPrefs[chanId] || "K";
       const baseLabel = `cRIO Temp ${parseInt(idx)+1}`;
-      ds.label = type === "RAW" ? `${baseLabel} (Raw mV)` : `${baseLabel} (Type ${type})`;
+      ds.label = type === "C"
+        ? `${baseLabel} (Type C calibrated)`
+        : (type === "RAW" ? `${baseLabel} (Raw mV)` : `${baseLabel} (Type ${type})`);
     }
   });
   _chart.update("none");
 }
 
 // ── Clock ──────────────────────────────────────────────────
+function convertCrioThermocouples(rawTemps = {}, cjcTemp = S.currentCjc) {
+  const rawMv = {};
+  const tempC = {};
+  ["temp_0", "temp_1", "temp_2", "temp_3"].forEach(id => {
+    const measuredMv = asNumberOrNull(rawTemps[id]);
+    rawMv[id] = measuredMv;
+    const tcType = S.tcPrefs[id] || "K";
+    const res = convertTC(id, measuredMv, tcType, cjcTemp);
+    tempC[id] = res.val;
+  });
+  return { rawMv, tempC };
+}
+
+function normalizeHistorySample(sample) {
+  const rawTemps = sample.crio_tc_raw_mv || sample.crio_temps || {};
+  const cjcTemp = sample.crio_cjc_temp_c ?? S.currentCjc;
+  const converted = convertCrioThermocouples(rawTemps, cjcTemp);
+  return {
+    ...sample,
+    crio_temps: {
+      ...converted.tempC,
+      temp_pyro: sample.crio_temps?.temp_pyro ?? null,
+    },
+    crio_tc_raw_mv: converted.rawMv,
+    crio_tc_temp_c: converted.tempC,
+  };
+}
+
 setInterval(() => { el("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }); }, 1000);
 
 // ── GCode log ──────────────────────────────────────────────
@@ -411,7 +477,7 @@ function updateCrioUI(data) {
           const res = convertTC(id, rawMv, tcType, S.currentCjc);
           vEl.textContent = (res.val !== null && !isNaN(res.val)) ? fmt(res.val, 1) : (res.msg || "---");
           if (uEl) uEl.textContent = tcType === "RAW" ? "mV" : "°C";
-          if (rEl) rEl.textContent = (rawMv !== null && !isNaN(rawMv)) ? rawMv.toFixed(4) + " mV" : "---";
+          if (rEl) rEl.textContent = (rawMv !== null && !isNaN(rawMv)) ? `Measured ${rawMv.toFixed(4)} mV` : "--- mV";
           
           if (bEl) {
             const barVal = (res.val !== null && !isNaN(res.val)) ? res.val : 0;
@@ -1256,7 +1322,7 @@ function _samplesToDatasets(samples) {
       if (d._key.startsWith("crio_temp_")) {
         // e.g. crio_temp_0 → look in crio_temps["temp_0"]
         const chanKey = "temp_" + d._key.split("_").pop();
-        val = s.crio_temps?.[chanKey] ?? null;
+        val = s.crio_tc_temp_c?.[chanKey] ?? s.crio_temps?.[chanKey] ?? null;
       } else if (d._key === "temp_pyro") {
         val = s.crio_temps?.["temp_pyro"] ?? null;
         if (val === -1.0) val = null; // Hide warming phase from chart
@@ -1276,8 +1342,8 @@ async function fetchHistory() {
       : null;
     const url = "/api/history" + (window_s ? `?window=${window_s}` : "");
     const samples = await get(url);
-    _chartData = samples;
-    _samplesToDatasets(samples);
+    _chartData = samples.map(normalizeHistorySample);
+    _samplesToDatasets(_chartData);
   } catch (e) {
     console.warn("fetchHistory error:", e);
   }
@@ -1288,19 +1354,13 @@ function _appendChartPoint(furnaceData, crioData) {
   if (!_chart) return;
   const now = Date.now();
   
-  // Convert cRIO temps before storage
-  const convertedTemps = {};
-  if (crioData && crioData.temperatures) {
-    for (const [id, rawMv] of Object.entries(crioData.temperatures)) {
-      if (id === "temp_pyro") {
-        convertedTemps[id] = rawMv;
-      } else {
-        const tcType = S.tcPrefs[id] || "K";
-        const res = convertTC(id, rawMv, tcType, S.currentCjc);
-        convertedTemps[id] = res.val;
-      }
-    }
-  }
+  // Store measured thermocouple mV separately from calculated deg C. The chart
+  // uses only calculated temperatures; CSV export includes both values.
+  const converted = convertCrioThermocouples(crioData?.temperatures || {}, crioData?.cjc_temp_c ?? S.currentCjc);
+  const convertedTemps = {
+    ...converted.tempC,
+    temp_pyro: crioData?.temperatures?.temp_pyro ?? null,
+  };
   const crioMod4 = {
     volt: Array.from(crioData?.mod4?.volt || []),
     curr: Array.from(crioData?.mod4?.curr || []),
@@ -1317,6 +1377,8 @@ function _appendChartPoint(furnaceData, crioData) {
     cap_v: furnaceData.cap_voltage,
     dc_v: furnaceData.dc_voltage,
     crio_temps: convertedTemps,
+    crio_tc_raw_mv: converted.rawMv,
+    crio_tc_temp_c: converted.tempC,
     crio_mod4: crioMod4,
   };
   _chartData.push(s);
@@ -1335,7 +1397,7 @@ function _appendChartPoint(furnaceData, crioData) {
     let val = null;
     if (d._key.startsWith("crio_temp_")) {
       const chanKey = "temp_" + d._key.split("_").pop();
-      val = s.crio_temps?.[chanKey] ?? null;
+      val = s.crio_tc_temp_c?.[chanKey] ?? s.crio_temps?.[chanKey] ?? null;
     } else {
       val = s[d._key] ?? null;
     }
@@ -1381,13 +1443,17 @@ function downloadCSV() {
   const mod4CurrCols = Array.from({ length: MOD4_CHANNELS }, (_, i) => `mod4_curr_${i}_mA`);
   const cols = ["timestamp", "temp_C", "power_W", "current_A", "freq_Hz",
     "water_lpm", "energy_Ws", "cap_voltage_V", "dc_voltage_V",
-    "crio_temp1_C", "crio_temp2_C", "crio_temp3_C", "crio_temp4_C",
+    "crio_temp1_mV", "crio_temp1_C",
+    "crio_temp2_mV", "crio_temp2_C",
+    "crio_temp3_mV", "crio_temp3_C",
+    "crio_temp4_mV", "crio_temp4_C",
     ...mod4VoltCols, ...mod4CurrCols];
   const rows = [cols.join(",")];
 
   _chartData.forEach(s => {
     const ts = new Date(s.t * 1000).toISOString();
-    const ct = s.crio_temps || {};
+    const ct = s.crio_tc_temp_c || s.crio_temps || {};
+    const cmv = s.crio_tc_raw_mv || {};
     const m4 = s.crio_mod4 || {};
     const volt = m4.volt || [];
     const curr = m4.curr || [];
@@ -1405,9 +1471,13 @@ function downloadCSV() {
       s.energy ?? "",
       s.cap_v ?? "",
       s.dc_v ?? "",
+      cmv["temp_0"] ?? "",
       ct["temp_0"] ?? "",
+      cmv["temp_1"] ?? "",
       ct["temp_1"] ?? "",
+      cmv["temp_2"] ?? "",
       ct["temp_2"] ?? "",
+      cmv["temp_3"] ?? "",
       ct["temp_3"] ?? "",
       ...mod4Values,
     ].join(","));
