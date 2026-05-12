@@ -24,10 +24,10 @@ RELAY_CHANNELS = {
 
 # Temperature channel definitions  {display_name: cRIO_channel_id}
 TEMP_CHANNELS = {
-    "Temp 1": "temp_0",
-    "Temp 2": "temp_1",
-    "Temp 3": "temp_2",
-    "Temp 4": "temp_3",
+    "Temp 0": "temp_0",
+    "Temp 1": "temp_1",
+    "Temp 2": "temp_2",
+    "Temp 3": "temp_3",
     "Pyrometer": "temp_pyro",
 }
 

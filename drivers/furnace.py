@@ -184,6 +184,7 @@ _status = {
     "comm_error":     "No valid furnace packet received yet",
     "actual_temp":    0.0,
     "actual":         0.0,
+    "furnace_pyrometer_temp_c": 0.0,
     "actual_power":   0.0,
     "actual_current": 0.0,
     "actual_freq":    0.0,
@@ -389,7 +390,9 @@ def _parse_input_packet(data: bytes) -> dict | None:
         p_energies = list(struct.unpack_from(">8I", data, 62))
         p_temps    = list(struct.unpack_from(">8f", data, 94))
         
-        # Apply offset and "Cold" logic
+        # Keep the numeric pyrometer packet value for CSV export. The GUI display
+        # still applies offset and "Cold" logic below.
+        furnace_pyrometer_temp_c = round(temp, 1)
         display_temp = temp + config.FURNACE_TEMP_OFFSET
         if temp < config.FURNACE_COLD_THRESHOLD:
             display_temp = "Cold"
@@ -405,6 +408,7 @@ def _parse_input_packet(data: bytes) -> dict | None:
             "prog_error":     bool(sw_inverter & SBIT_PROG_ERR),
             "heartbeat":      bool(sw_inverter & SBIT_HEARTBEAT),
             "fsm_state":      FSM_STATES.get(fsm_raw, f"State{fsm_raw}"),
+            "furnace_pyrometer_temp_c": furnace_pyrometer_temp_c,
             "actual_temp":    display_temp,
             "actual":         display_temp,
             "actual_power":   round(power, 1),
@@ -635,6 +639,7 @@ def get_status() -> dict:
             "ctrl_mode":      _ctrl["ctrl_mode"],
             "setpoint":       _ctrl["setpoint_c"],
             "heatprog_no":    _ctrl["heatprog_no"],
+            "furnace_pyrometer_temp_c": _status.get("furnace_pyrometer_temp_c"),
             "actual":         _status["actual_temp"],
             "actual_power":   _status["actual_power"],
             "actual_current": _status["actual_current"],

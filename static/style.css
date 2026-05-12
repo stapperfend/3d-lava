@@ -201,12 +201,59 @@ body {
 /* â”€â”€ Grid (viewport-filling, 3Ã—2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-columns: minmax(430px, 1.25fr) minmax(400px, 1fr) minmax(330px, .82fr);
+  grid-template-rows: minmax(0, 1.2fr) minmax(0, .8fr);
+  grid-template-areas:
+    "crio furnace duet"
+    "crio chart chart";
   gap: 8px;
   padding: 8px;
   height: calc(100vh - 48px);
   overflow: hidden;
+}
+
+#crio-panel {
+  grid-area: crio;
+}
+
+#duet-panel {
+  grid-area: duet;
+}
+
+#furnace-panel {
+  grid-area: furnace;
+}
+
+#chart-panel {
+  grid-area: chart;
+}
+
+@media (max-width: 1240px) {
+  html,
+  body {
+    overflow: auto;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-template-areas:
+      "crio"
+      "duet"
+      "furnace"
+      "chart";
+    height: auto;
+    min-height: calc(100vh - 48px);
+    overflow: visible;
+  }
+
+  .card {
+    min-height: 420px;
+  }
+
+  #duet-panel {
+    min-height: 680px;
+  }
 }
 
 /* â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -243,6 +290,7 @@ body {
 .card-subtitle {
   font-size: 10px;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .card-body {
@@ -335,7 +383,7 @@ body {
   background: var(--surface2);
   border: 1px solid var(--purple-dim);
   border-radius: var(--rs);
-  padding: 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -349,6 +397,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-height: 22px;
 }
 
 .pyro-title {
@@ -361,8 +411,10 @@ body {
 
 .pyro-main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  min-height: 48px;
+  position: relative;
 }
 
 .pyro-value {
@@ -401,7 +453,7 @@ body {
   align-items: center;
   gap: 10px;
   background: var(--surface3);
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: var(--rs);
 }
 
@@ -419,6 +471,44 @@ body {
 .relay-item.active {
   border-color: var(--purple);
   background: var(--purple-dim);
+}
+
+.relay-item.relay-write-pending,
+.relay-item-tl.relay-write-pending {
+  outline: 1px solid var(--yellow);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.12);
+}
+
+.relay-item.relay-write-error,
+.relay-item-tl.relay-write-error {
+  outline: 1px solid var(--red);
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.12);
+}
+
+.relay-write-status {
+  min-height: 20px;
+  padding: 4px 7px;
+  border-radius: var(--rs);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.relay-write-status.ok {
+  color: var(--green);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
+.relay-write-status.warn {
+  color: var(--yellow);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.relay-write-status.error {
+  color: var(--red);
+  border-color: rgba(244, 63, 94, 0.3);
 }
 
 .relay-item.relay-passive {
@@ -591,6 +681,42 @@ body {
 
 .mod4-value.missing {
   color: var(--muted);
+}
+
+#crio-panel .card-body {
+  gap: 7px;
+}
+
+#crio-panel .temp-grid,
+#crio-panel .mod4-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#crio-panel .pyro-control-box {
+  margin-top: 4px;
+}
+
+#crio-panel .temp-card {
+  min-width: 0;
+  padding: 7px 6px;
+}
+
+#crio-panel .temp-value {
+  font-size: 18px;
+}
+
+#crio-panel .tc-selector {
+  max-width: 72px;
+}
+
+#crio-panel .mod4-card {
+  min-width: 0;
+  padding: 6px 7px;
+}
+
+#crio-panel .mod4-row {
+  grid-template-columns: 10px minmax(0, 1fr) 18px;
+  gap: 3px;
 }
 
 /* â”€â”€ Duet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -797,6 +923,160 @@ body {
   border-color: var(--purple);
 }
 
+#duet-panel .card-body {
+  gap: 8px;
+}
+
+#duet-panel .card-header,
+#crio-panel .card-header,
+#furnace-panel .card-header,
+#chart-panel .card-header {
+  flex-wrap: wrap;
+  align-content: center;
+}
+
+#furnace-panel .card-header {
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+#furnace-panel .card-header h2 {
+  flex: 1 0 120px;
+}
+
+#furnace-panel .heartbeat-wrap {
+  margin-right: 2px;
+}
+
+#furnace-panel .btn-xs {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+#chart-panel .card-header {
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+#chart-panel .chart-toolbar {
+  margin-left: 4px;
+  gap: 8px;
+}
+
+#chart-panel .btn-xs {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+#duet-panel .gcode-editors {
+  flex: 0 0 92px;
+}
+
+#duet-panel .gcode-ta {
+  min-height: 58px;
+  font-size: 10px;
+  padding: 6px;
+}
+
+#duet-panel .gcode-editor-header {
+  font-size: 10px;
+  gap: 4px;
+}
+
+#duet-panel .gcode-log {
+  min-height: 32px;
+  max-height: 40px;
+  padding: 5px;
+}
+
+#duet-panel .gcode-input {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+#duet-panel .gcode-input-row {
+  gap: 4px;
+}
+
+.duet-viz-drawer {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--rs);
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.duet-viz-drawer summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 5px 9px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.duet-viz-drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.duet-viz-drawer summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform .16s;
+}
+
+.duet-viz-drawer[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.duet-viz-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+#duet-panel .viz-card-body {
+  height: 190px;
+  min-height: 170px;
+}
+
+#duet-panel .jog-section {
+  gap: 8px;
+  padding: 2px 0;
+}
+
+#duet-panel .jog-settings {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+#duet-panel .jog-settings .tiny-label {
+  white-space: nowrap;
+}
+
+#duet-panel .jog-step-opt {
+  min-width: 24px;
+}
+
+#duet-panel #jog-feed {
+  width: 50px !important;
+}
+
+#duet-panel .jog-pad {
+  grid-template-columns: repeat(3, 28px);
+  grid-template-rows: repeat(3, 28px);
+}
+
+#duet-panel .jog-btn {
+  width: 28px;
+  height: 28px;
+}
+
 /* â”€â”€ Furnace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .furnace-body {
   gap: 6px;
@@ -927,6 +1207,14 @@ body {
   background: var(--red-dim);
   border-color: var(--red);
   color: var(--red);
+}
+
+#furnace-panel .live-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#furnace-panel .lg-item.lg-flags {
+  grid-column: 1 / -1;
 }
 
 /* Mode row */
@@ -1601,13 +1889,14 @@ code {
    GCode Visualizer Card
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .viz-card-body {
-  flex: 1;
-  min-height: 0;
+  height: 260px;
+  min-height: 220px;
   display: flex;
   align-items: stretch;
   justify-content: center;
   padding: 6px;
   background: var(--surface2);
+  border-top: 1px solid var(--border);
 }
 
 .viz-svg {

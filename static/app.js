@@ -10,6 +10,35 @@ const el = id => document.getElementById(id);
 const fmt = (v, d = 1) => (v == null || v === "" || isNaN(+v)) ? "—" : (+v).toFixed(d);
 console.log("[APP] v1.1.2 - Active");
 const asNumberOrNull = v => (v == null || v === "" || Number.isNaN(Number(v))) ? null : Number(v);
+const emissivityFraction = value => {
+  const n = asNumberOrNull(value);
+  if (n === null) return null;
+  return n > 1 ? n / 100 : n;
+};
+const formatEmissivityPercent = value => {
+  const fraction = emissivityFraction(value);
+  return fraction === null ? "---" : fraction.toFixed(2);
+};
+window.formatEmissivityPercent = formatEmissivityPercent;
+const relayMap = value => {
+  if (Array.isArray(value)) {
+    return Object.fromEntries(value.map((relayValue, i) => [`relay_${i}`, relayValue]));
+  }
+  return (value && typeof value === "object") ? value : {};
+};
+const relayValue = (map, id) => {
+  if (!Object.prototype.hasOwnProperty.call(map, id)) return undefined;
+  return map[id] === null || map[id] === undefined ? undefined : !!map[id];
+};
+const formatRelayWriteTime = value => {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number") {
+    const millis = value > 1e12 ? value : value * 1000;
+    return new Date(millis).toLocaleTimeString("en-GB", { hour12: false });
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? String(value) : new Date(parsed).toLocaleTimeString("en-GB", { hour12: false });
+};
 const DEBUG_TC = false;
 const CHART_LIVE_INTERVAL_MS = 500;
 const MOD4_CHANNELS = 8;
@@ -47,7 +76,8 @@ const S = {
   tcPrefs: JSON.parse(localStorage.getItem("tc_prefs") || "{}"),
   cjcMode: localStorage.getItem("cjc_mode") || "auto", // "auto" | "manual"
   cjcManualVal: parseFloat(localStorage.getItem("cjc_val") || "22.0"),
-  currentCjc: 22.0
+  currentCjc: 22.0,
+  lastCrio: null
 };
 
 // Requirement 9 & 10: Default mapping & migration
@@ -231,7 +261,7 @@ function syncChartLabels() {
       const idx = ds._key.split("_").pop();
       const chanId = `temp_${idx}`;
       const type = S.tcPrefs[chanId] || "K";
-      const baseLabel = `cRIO Temp ${parseInt(idx)+1}`;
+      const baseLabel = `cRIO Temp ${idx}`;
       ds.label = type === "C"
         ? `${baseLabel} (Type C calibrated)`
         : (type === "RAW" ? `${baseLabel} (Raw mV)` : `${baseLabel} (Type ${type})`);
@@ -244,20 +274,31 @@ function syncChartLabels() {
 function convertCrioThermocouples(rawTemps = {}, cjcTemp = S.currentCjc) {
   const rawMv = {};
   const tempC = {};
+  const status = {};
   ["temp_0", "temp_1", "temp_2", "temp_3"].forEach(id => {
     const measuredMv = asNumberOrNull(rawTemps[id]);
     rawMv[id] = measuredMv;
     const tcType = S.tcPrefs[id] || "K";
     const res = convertTC(id, measuredMv, tcType, cjcTemp);
     tempC[id] = res.val;
+    status[id] = res.msg || "ok";
   });
-  return { rawMv, tempC };
+  return { rawMv, tempC, status };
 }
 
 function normalizeHistorySample(sample) {
-  const rawTemps = sample.crio_tc_raw_mv || sample.crio_temps || {};
+  const sourceRawTemps = sample.crio_tc_raw_mv || {};
+  const sourceTemps = sample.crio_temps || {};
+  const rawTemps = {};
+  ["temp_0", "temp_1", "temp_2", "temp_3"].forEach(id => {
+    const rawValue = sourceRawTemps[id];
+    rawTemps[id] = (rawValue === null || rawValue === undefined || rawValue === "")
+      ? sourceTemps[id]
+      : rawValue;
+  });
   const cjcTemp = sample.crio_cjc_temp_c ?? S.currentCjc;
   const converted = convertCrioThermocouples(rawTemps, cjcTemp);
+  const pyrometer = sample.crio_pyrometer || sample.pyro_info || {};
   return {
     ...sample,
     crio_temps: {
@@ -266,6 +307,12 @@ function normalizeHistorySample(sample) {
     },
     crio_tc_raw_mv: converted.rawMv,
     crio_tc_temp_c: converted.tempC,
+    crio_tc_status: converted.status,
+    crio_pyrometer: pyrometer,
+    crio_emissivity_set_percent: sample.crio_emissivity_set_percent
+      ?? sample.crio_emissivity_cmd
+      ?? pyrometer.emissivity_commanded_percent
+      ?? null,
   };
 }
 
@@ -285,7 +332,7 @@ let _lastChartAppendMs = 0;
 socket.on("connect", () => { el("conn-dot").className = "status-dot connected"; el("conn-label").textContent = "Connected"; appendLog("⚡ Connected.", "log-info"); });
 socket.on("disconnect", () => { el("conn-dot").className = "status-dot disconnected"; el("conn-label").textContent = "Disconnected"; appendLog("✖ Disconnected.", "log-error"); });
 socket.on("status_update", data => {
-  if (data.crio) { updateCrioUI(data.crio); triggerHB("crio", "rx"); }
+  if (data.crio) { S.lastCrio = data.crio; updateCrioUI(data.crio); triggerHB("crio", "rx"); }
   if (data.duet) { updateDuetUI(data.duet); triggerHB("duet", "rx"); }
   if (data.furnace) { updateFurnaceUI(data.furnace); triggerHB("furnace", "rx"); }
   if (data.traffic) updateTrafficLight(data.traffic);
@@ -293,7 +340,7 @@ socket.on("status_update", data => {
     const now = Date.now();
     if (now - _lastChartAppendMs >= CHART_LIVE_INTERVAL_MS) {
       _lastChartAppendMs = now;
-      _appendChartPoint(data.furnace, data.crio);
+      _appendChartPoint(data.furnace, data.crio || S.lastCrio);
     }
   }
   // Live position → visualizer
@@ -313,7 +360,9 @@ function updateTrafficLight(data) {
   // Logic for the label (top bar) - show highest priority color
   let activeLabel = "STANDBY";
   let activeColor = "var(--muted)";
-  if (data.red) { activeLabel = "PROCESS ACTIVE"; activeColor = "var(--red)"; }
+  if (data.write_error) { activeLabel = "DAQ WRITE ERROR"; activeColor = "var(--red)"; }
+  else if (data.write_pending) { activeLabel = "DAQ WRITE PENDING"; activeColor = "var(--yellow)"; }
+  else if (data.red) { activeLabel = "PROCESS ACTIVE"; activeColor = "var(--red)"; }
   else if (data.yellow) { activeLabel = "VACUUM ACTIVE"; activeColor = "var(--yellow)"; }
   else if (data.green) { activeLabel = "STANDBY"; activeColor = "var(--green)"; }
   
@@ -321,6 +370,7 @@ function updateTrafficLight(data) {
   if (lbl) {
     lbl.textContent = activeLabel;
     lbl.style.color = activeColor;
+    lbl.title = data.write_error || (data.write_pending ? "Relay command differs from last successful DAQ write" : "");
   }
 }
 
@@ -401,16 +451,51 @@ function updateCrioUI(data) {
   if (el("crio-ts")) el("crio-ts").textContent = data.timestamp || "---";
   if (el("crio-seq")) el("crio-seq").textContent = data.sequence || "---";
 
-  if (data.relays) {
-    for (const [id, on] of Object.entries(data.relays)) {
-      const cb = document.querySelector(`.relay-cb[data-channel="${id}"]`);
-      const item = el(`relay-${id}`);
-      const now = Date.now();
-      const inCooldown = cb && cb._lastClick && (now - cb._lastClick < 1000);
-      if (cb && !inCooldown) { 
-        cb.checked = on; 
-        item?.classList.toggle("active", on); 
+  const relayCommand = relayMap(data.relay_command);
+  const relayWritten = relayMap(data.relay_last_written || data.relays);
+  const relayWriteError = data.relay_last_write_error || "";
+  const relayMismatch = new Set(data.relay_write_mismatch_channels || []);
+  const relayStatus = el("relay-write-status");
+  const relayWriteTime = formatRelayWriteTime(data.relay_last_write_time);
+
+  document.querySelectorAll(".relay-cb[data-channel]").forEach(cb => {
+    const id = cb.dataset.channel;
+    const item = el(`relay-${id}`);
+    const commanded = relayValue(relayCommand, id);
+    const written = relayValue(relayWritten, id);
+    const now = Date.now();
+    const inCooldown = cb._lastClick && (now - cb._lastClick < 1000);
+
+    if (!inCooldown && commanded !== undefined) {
+      cb.checked = commanded;
+    }
+    if (item) {
+      item.classList.toggle("active", written === true);
+      item.classList.toggle("relay-write-pending", !relayWriteError && relayMismatch.has(id));
+      item.classList.toggle("relay-write-error", !!relayWriteError);
+      if (relayWriteError) {
+        item.title = `DAQ write failed: ${relayWriteError}`;
+      } else if (relayMismatch.has(id)) {
+        item.title = `Command ${commanded ? "ON" : "OFF"}, last DAQ write ${written ? "ON" : "OFF"}`;
+      } else {
+        item.title = written === undefined ? "No relay_last_written telemetry yet" : `Last DAQ write ${written ? "ON" : "OFF"}`;
       }
+    }
+  });
+
+  if (relayStatus) {
+    if (relayWriteError) {
+      relayStatus.textContent = `DAQ write failed${relayWriteTime ? " " + relayWriteTime : ""}: ${relayWriteError}`;
+      relayStatus.className = "relay-write-status mono error";
+    } else if (relayMismatch.size) {
+      relayStatus.textContent = `DAQ write pending${relayWriteTime ? " since " + relayWriteTime : ""}: ${[...relayMismatch].join(", ")}`;
+      relayStatus.className = "relay-write-status mono warn";
+    } else if (Object.keys(relayWritten).length) {
+      relayStatus.textContent = `DAQ write OK${relayWriteTime ? " " + relayWriteTime : ""}`;
+      relayStatus.className = "relay-write-status mono ok";
+    } else {
+      relayStatus.textContent = "DAQ write: waiting for relay_last_written";
+      relayStatus.className = "relay-write-status mono";
     }
   }
   
@@ -491,7 +576,7 @@ function updateCrioUI(data) {
 }
 
 async function setEmissivity(value) {
-  console.log(`[CRIO] Setting emissivity to ${value}%`);
+  console.log(`[CRIO] Setting emissivity to ${formatEmissivityPercent(value)}`);
   triggerHB("crio", "tx");
   const d = await post("/api/crio/emissivity", { value: parseInt(value) });
   console.log(`[CRIO] Emissivity response:`, d);
@@ -694,7 +779,8 @@ async function toggleRelay(channelId, newState) {
       cb.checked = !newState;
       cb._lastClick = 0; // Reset cooldown on error so status update can fix it
   } else {
-      el(`relay-${channelId}`)?.classList.toggle("active", newState);
+      if (cb) cb.checked = newState;
+      el(`relay-${channelId}`)?.classList.add("relay-write-pending");
   }
 }
 
@@ -1200,7 +1286,7 @@ function renderPacket(dir, pkt) {
 // Dataset definitions — order matters for the legend
 const CHART_DATASETS = [
   // Left Y axis (temperature °C)
-  { key: "temp", label: "Temperature (°C)", color: "#f97316", yAxis: "yL", hidden: false },
+  { key: "temp", label: "Furnace Pyrometer (°C)", color: "#f97316", yAxis: "yL", hidden: false },
   // Right Y axis (electrical / flow / energy)
   { key: "power", label: "Power (W)", color: "#7c6af7", yAxis: "yR", hidden: false },
   { key: "current", label: "Current (A)", color: "#38bdf8", yAxis: "yR", hidden: false },
@@ -1210,11 +1296,11 @@ const CHART_DATASETS = [
   { key: "cap_v", label: "Cap Voltage (V)", color: "#a78bfa", yAxis: "yR", hidden: true },
   { key: "dc_v", label: "DC Voltage (V)", color: "#22d3ee", yAxis: "yR", hidden: true },
   // cRIO temperatures (dashed, left axis) — we'll add dynamically on first data
-  { key: "crio_temp_0", label: "cRIO Temp 1 (°C)", color: "#fb923c", yAxis: "yL", hidden: true, dash: [5, 3] },
-  { key: "crio_temp_1", label: "cRIO Temp 2 (°C)", color: "#fde68a", yAxis: "yL", hidden: true, dash: [5, 3] },
-  { key: "crio_temp_2", label: "cRIO Temp 3 (°C)", color: "#86efac", yAxis: "yL", hidden: true, dash: [5, 3] },
-  { key: "crio_temp_3", label: "cRIO Temp 4 (°C)", color: "#67e8f9", yAxis: "yL", hidden: true, dash: [5, 3] },
-  { key: "temp_pyro",   label: "Pyrometer (°C)",   color: "#f87171", yAxis: "yL", hidden: false, dash: [2, 2] },
+  { key: "crio_temp_0", label: "cRIO Temp 0 (°C)", color: "#fb923c", yAxis: "yL", hidden: true, dash: [5, 3] },
+  { key: "crio_temp_1", label: "cRIO Temp 1 (°C)", color: "#fde68a", yAxis: "yL", hidden: true, dash: [5, 3] },
+  { key: "crio_temp_2", label: "cRIO Temp 2 (°C)", color: "#86efac", yAxis: "yL", hidden: true, dash: [5, 3] },
+  { key: "crio_temp_3", label: "cRIO Temp 3 (°C)", color: "#67e8f9", yAxis: "yL", hidden: true, dash: [5, 3] },
+  { key: "temp_pyro",   label: "Melt Optical Pyrometer (°C)", color: "#f87171", yAxis: "yL", hidden: false, dash: [2, 2] },
 ];
 
 let _chart = null;
@@ -1365,21 +1451,44 @@ function _appendChartPoint(furnaceData, crioData) {
     volt: Array.from(crioData?.mod4?.volt || []),
     curr: Array.from(crioData?.mod4?.curr || []),
   };
+  const crioPyrometer = (crioData?.pyro_info && typeof crioData.pyro_info === "object")
+    ? crioData.pyro_info
+    : {};
 
   const s = {
     t: now / 1000,
+    furnace_pyrometer_temp_c: asNumberOrNull(furnaceData.furnace_pyrometer_temp_c),
+    furnace_actual_display: furnaceData.actual,
     temp: asNumberOrNull(furnaceData.actual),
+    setpoint: asNumberOrNull(furnaceData.setpoint),
+    enabled: furnaceData.enabled,
+    ctrl_mode: furnaceData.ctrl_mode,
     power: furnaceData.actual_power,
     current: furnaceData.actual_current,
     freq: furnaceData.actual_freq,
+    phase_angle: furnaceData.phase_angle,
     water: furnaceData.water_flow,
     energy: furnaceData.actual_energy,
     cap_v: furnaceData.cap_voltage,
     dc_v: furnaceData.dc_voltage,
+    fsm: furnaceData.fsm_state,
+    status_word: furnaceData.status_word,
+    process_status: furnaceData.process_status,
+    error_word: furnaceData.error_word,
+    error_word_prog: furnaceData.error_word_prog,
+    heating_program: furnaceData.heating_program,
+    heating_program_phase: furnaceData.heating_program_phase,
     crio_temps: convertedTemps,
     crio_tc_raw_mv: converted.rawMv,
     crio_tc_temp_c: converted.tempC,
+    crio_tc_status: converted.status,
+    crio_cjc_temp_c: crioData?.cjc_temp_c ?? null,
+    crio_cjc_source: crioData?.cjc_source ?? null,
     crio_mod4: crioMod4,
+    crio_pyrometer: { ...crioPyrometer },
+    crio_emissivity_set_percent: crioData?.emissivity_cmd
+      ?? crioPyrometer.emissivity_commanded_percent
+      ?? null,
   };
   _chartData.push(s);
 
@@ -1438,56 +1547,139 @@ async function resetGraph() {
 
 function downloadCSV() {
   if (!_chartData.length) return;
-  // Build header row
-  const mod4VoltCols = Array.from({ length: MOD4_CHANNELS }, (_, i) => `mod4_volt_${i}_V`);
-  const mod4CurrCols = Array.from({ length: MOD4_CHANNELS }, (_, i) => `mod4_curr_${i}_mA`);
-  const cols = ["timestamp", "temp_C", "power_W", "current_A", "freq_Hz",
-    "water_lpm", "energy_Ws", "cap_voltage_V", "dc_voltage_V",
-    "crio_temp1_mV", "crio_temp1_C",
-    "crio_temp2_mV", "crio_temp2_C",
-    "crio_temp3_mV", "crio_temp3_C",
-    "crio_temp4_mV", "crio_temp4_C",
-    ...mod4VoltCols, ...mod4CurrCols];
-  const rows = [cols.join(",")];
-
-  _chartData.forEach(s => {
-    const ts = new Date(s.t * 1000).toISOString();
-    const ct = s.crio_tc_temp_c || s.crio_temps || {};
-    const cmv = s.crio_tc_raw_mv || {};
-    const m4 = s.crio_mod4 || {};
-    const volt = m4.volt || [];
-    const curr = m4.curr || [];
-    const mod4Values = [
-      ...Array.from({ length: MOD4_CHANNELS }, (_, i) => volt[i] ?? ""),
-      ...Array.from({ length: MOD4_CHANNELS }, (_, i) => curr[i] ?? ""),
-    ];
-    rows.push([
-      ts,
-      s.temp ?? "",
-      s.power ?? "",
-      s.current ?? "",
-      s.freq ?? "",
-      s.water ?? "",
-      s.energy ?? "",
-      s.cap_v ?? "",
-      s.dc_v ?? "",
-      cmv["temp_0"] ?? "",
-      ct["temp_0"] ?? "",
-      cmv["temp_1"] ?? "",
-      ct["temp_1"] ?? "",
-      cmv["temp_2"] ?? "",
-      ct["temp_2"] ?? "",
-      cmv["temp_3"] ?? "",
-      ct["temp_3"] ?? "",
-      ...mod4Values,
-    ].join(","));
+  const isMissingCsvValue = value => {
+    if (value === null || value === undefined || value === "") return true;
+    if (typeof value === "number") return !Number.isFinite(value);
+    if (typeof value === "string") {
+      const cleaned = value.trim().toLowerCase();
+      return cleaned === "" || cleaned === "nan" || cleaned === "null" || cleaned === "undefined";
+    }
+    return false;
+  };
+  const csvValue = value => isMissingCsvValue(value) ? "" : value;
+  const csvCell = value => {
+    const cleaned = csvValue(value);
+    const text = String(cleaned);
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const pad2 = value => String(value).padStart(2, "0");
+  const pad3 = value => String(value).padStart(3, "0");
+  const timezoneOffset = date => {
+    const offsetMinutes = -date.getTimezoneOffset();
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const absMinutes = Math.abs(offsetMinutes);
+    return `${sign}${pad2(Math.floor(absMinutes / 60))}:${pad2(absMinutes % 60)}`;
+  };
+  const localDateParts = date => ({
+    year: date.getFullYear(),
+    month: pad2(date.getMonth() + 1),
+    day: pad2(date.getDate()),
+    hour: pad2(date.getHours()),
+    minute: pad2(date.getMinutes()),
+    second: pad2(date.getSeconds()),
+    millis: pad3(date.getMilliseconds()),
   });
+  const formatLocalTimestamp = date => {
+    const p = localDateParts(date);
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}.${p.millis}${timezoneOffset(date)}`;
+  };
+  const formatLocalFilenameStamp = date => {
+    const p = localDateParts(date);
+    return `${p.year}-${p.month}-${p.day}_${p.hour}-${p.minute}-${p.second}`;
+  };
+  const timestamp = sample => {
+    const seconds = Number(sample.t);
+    return Number.isFinite(seconds) ? formatLocalTimestamp(new Date(seconds * 1000)) : "";
+  };
+  const tcRaw = (sample, id) => (sample.crio_tc_raw_mv || {})[id];
+  const tcTemp = (sample, id) => (sample.crio_tc_temp_c || sample.crio_temps || {})[id];
+  const tcStatus = (sample, id) => (sample.crio_tc_status || {})[id];
+  const furnacePyrometerTemp = sample => sample.temp ?? sample.furnace_pyrometer_temp_c;
+  const furnacePyrometerStatus = sample => {
+    if (!isMissingCsvValue(furnacePyrometerTemp(sample))) return "ok";
+    if (sample.furnace_actual_display === "Cold") return "cold";
+    return "missing";
+  };
+  const meltPyrometerTemp = sample => {
+    const value = sample.crio_temps?.temp_pyro;
+    return value === -1.0 ? "" : value;
+  };
+  const meltPyrometerEmissivity = sample => {
+    const pyrometer = sample.crio_pyrometer || {};
+    const fraction = emissivityFraction(sample.crio_emissivity_set_percent
+      ?? pyrometer.emissivity_commanded_percent
+      ?? pyrometer.emissivity_set_percent
+      ?? "");
+    return fraction === null ? "" : fraction.toFixed(2);
+  };
+  const meltPyrometerEmissivityActual = sample => {
+    const pyrometer = sample.crio_pyrometer || {};
+    const fraction = emissivityFraction(pyrometer.emissivity_actual_percent ?? pyrometer.emissivity_percent ?? "");
+    return fraction === null ? "" : fraction.toFixed(2);
+  };
+  const meltPyrometerEmissivityVerified = sample => {
+    const pyrometer = sample.crio_pyrometer || {};
+    return pyrometer.emissivity_verified;
+  };
+  const mod4Value = (sample, kind, index) => (sample.crio_mod4?.[kind] || [])[index];
+
+  // Furnace "Temperature" is the furnace pyrometer; cRIO RS232 pyrometer is the melt pyrometer.
+  const columns = [
+    { name: "timestamp_local", always: true, get: timestamp },
+    { name: "furnace_pyrometer_temp_C", always: true, get: furnacePyrometerTemp },
+    { name: "furnace_pyrometer_status", always: true, get: furnacePyrometerStatus },
+    { name: "furnace_pyrometer_raw_temp_C", get: sample => sample.furnace_pyrometer_temp_c },
+    { name: "melt_optical_pyrometer_temp_C", always: true, get: meltPyrometerTemp },
+    { name: "melt_optical_pyrometer_emissivity_set", always: true, get: meltPyrometerEmissivity },
+    { name: "melt_optical_pyrometer_emissivity_actual", get: meltPyrometerEmissivityActual },
+    { name: "melt_optical_pyrometer_emissivity_verified", get: meltPyrometerEmissivityVerified },
+    { name: "furnace_setpoint_C", get: sample => sample.setpoint },
+    { name: "furnace_enabled", get: sample => sample.enabled },
+    { name: "furnace_ctrl_mode", get: sample => sample.ctrl_mode },
+    { name: "furnace_fsm_state", get: sample => sample.fsm },
+    { name: "furnace_heating_program", get: sample => sample.heating_program },
+    { name: "furnace_heating_program_phase", get: sample => sample.heating_program_phase },
+    { name: "power_W", get: sample => sample.power },
+    { name: "current_A", get: sample => sample.current },
+    { name: "freq_Hz", get: sample => sample.freq },
+    { name: "phase_angle_deg", get: sample => sample.phase_angle },
+    { name: "water_lpm", get: sample => sample.water },
+    { name: "total_energy_Ws", always: true, get: sample => sample.energy },
+    { name: "cap_voltage_V", get: sample => sample.cap_v },
+    { name: "dc_voltage_V", get: sample => sample.dc_v },
+    { name: "furnace_status_word", get: sample => sample.status_word },
+    { name: "furnace_process_status", get: sample => sample.process_status },
+    { name: "furnace_error_word", get: sample => sample.error_word },
+    { name: "furnace_error_word_prog", get: sample => sample.error_word_prog },
+    { name: "crio_cjc_temp_C", get: sample => sample.crio_cjc_temp_c },
+    { name: "crio_cjc_source", get: sample => sample.crio_cjc_source },
+  ];
+  for (let i = 0; i < 4; i++) {
+    columns.push({ name: `crio_temp_${i}_mV`, always: true, get: sample => tcRaw(sample, `temp_${i}`) });
+    columns.push({ name: `crio_temp_${i}_C`, always: true, get: sample => tcTemp(sample, `temp_${i}`) });
+    columns.push({ name: `crio_temp_${i}_status`, always: true, get: sample => tcStatus(sample, `temp_${i}`) });
+  }
+  for (let i = 0; i < MOD4_CHANNELS; i++) {
+    columns.push({ name: `mod4_volt_${i}_V`, get: sample => mod4Value(sample, "volt", i) });
+  }
+  for (let i = 0; i < MOD4_CHANNELS; i++) {
+    columns.push({ name: `mod4_curr_${i}_mA`, get: sample => mod4Value(sample, "curr", i) });
+  }
+
+  const rawRows = _chartData.map(sample => columns.map(column => csvValue(column.get(sample))));
+  const keepColumn = columns.map((column, index) =>
+    column.always || rawRows.some(row => !isMissingCsvValue(row[index]))
+  );
+  const rows = [
+    columns.filter((_, index) => keepColumn[index]).map(column => csvCell(column.name)).join(","),
+    ...rawRows.map(row => row.filter((_, index) => keepColumn[index]).map(csvCell).join(",")),
+  ];
 
   const blob = new Blob([rows.join("\n")], { type: "text/csv" });
   const a = document.createElement("a");
   const label = _chartWindow === "total" ? "process_total" : "process_section";
   a.href = URL.createObjectURL(blob);
-  a.download = `${label}_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
+  a.download = `${label}_${formatLocalFilenameStamp(new Date())}.csv`;
   a.click();
 }
 
@@ -1606,6 +1798,12 @@ function initViz() {
 
 function setVizMode(mode) {
   _vizMode = mode;
+  renderViz();
+}
+
+function openDuetViz() {
+  const drawer = el("duet-viz-drawer");
+  if (drawer) drawer.open = true;
   renderViz();
 }
 

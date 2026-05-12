@@ -109,6 +109,8 @@
           </div>
         </div>
 
+        <div class="relay-write-status mono" id="relay-write-status">DAQ write: ---</div>
+
         <div class="section-label" style="margin-top:15px">Pyrometer Interface</div>
         <div class="pyro-control-box">
           <div class="pyro-header">
@@ -125,10 +127,10 @@
           </div>
           <div class="emissivity-row">
             <span class="tiny-label">Emissivity</span>
-            <input type="range" class="ctrl-slider" id="emissivity-slider" min="20" max="100" step="1" value="85"
-              oninput="el('emissivity-val').textContent = this.value + '%'"
+            <input type="range" class="ctrl-slider" id="emissivity-slider" min="20" max="100" step="1" value="100"
+              oninput="el('emissivity-val').textContent = formatEmissivityPercent(this.value)"
               onchange="setEmissivity(this.value)" />
-            <span class="ctrl-num mono" id="emissivity-val" style="min-width:40px">85%</span>
+            <span class="ctrl-num mono" id="emissivity-val" style="min-width:40px">1.00</span>
           </div>
         </div>
 
@@ -221,7 +223,7 @@
             <div class="gcode-editor-header">
               <span>🏠 Homing GCode</span>
               <button class="btn btn-xs" onclick="saveGcode('home')">Save</button>
-              <button class="btn btn-xs" onclick="renderViz()">⟳ Viz</button>
+              <button class="btn btn-xs" onclick="openDuetViz()">⟳ Viz</button>
             </div>
             <textarea id="gcode-home-editor" class="gcode-ta" spellcheck="false" placeholder="; Homing sequence…"
               oninput="renderViz()"></textarea>
@@ -230,7 +232,7 @@
             <div class="gcode-editor-header">
               <span>🔄 Process GCode <small>(loop)</small></span>
               <button class="btn btn-xs" onclick="saveGcode('process')">Save</button>
-              <button class="btn btn-xs" onclick="renderViz()">⟳ Viz</button>
+              <button class="btn btn-xs" onclick="openDuetViz()">⟳ Viz</button>
             </div>
             <textarea id="gcode-process-editor" class="gcode-ta" spellcheck="false" placeholder="; Repeating process…"
               oninput="renderViz()"></textarea>
@@ -244,6 +246,35 @@
           <button class="btn btn-wf" id="wf-pause-btn" onclick="wfPause()" disabled>⏸ Pause</button>
           <button class="btn btn-wf" id="wf-stop-btn" onclick="wfStop()" disabled>⏹ Stop</button>
         </div>
+
+        <details class="duet-viz-drawer" id="duet-viz-drawer">
+          <summary>
+            <span class="duet-viz-title">GCode Visualizer</span>
+            <span class="viz-toolbar">
+              <label class="chart-tw-opt" onclick="event.stopPropagation()">
+                <input type="radio" name="viz-mode" value="home" checked onchange="setVizMode('home')" /> Homing
+              </label>
+              <label class="chart-tw-opt" onclick="event.stopPropagation()">
+                <input type="radio" name="viz-mode" value="both" onchange="setVizMode('both')" /> + Process
+              </label>
+            </span>
+            <span class="viz-pos-display mono" id="viz-pos">X— Y—</span>
+          </summary>
+          <div class="viz-card-body">
+            <svg id="gcode-viz" class="viz-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+              <rect id="viz-bed" class="viz-bed" x="10" y="10" width="380" height="380" />
+              <rect id="viz-travel" class="viz-travel" x="10" y="10" width="270" height="270" />
+              <g id="viz-crosshair">
+                <line class="viz-cross" x1="143" y1="0" x2="143" y2="400" />
+                <line class="viz-cross" x1="0" y1="143" x2="400" y2="143" />
+              </g>
+              <g id="viz-home-path"></g>
+              <g id="viz-process-path"></g>
+              <circle id="viz-live-dot" class="viz-live-dot" cx="-50" cy="-50" r="5" />
+              <polyline id="viz-trail" class="viz-trail" points="" />
+            </svg>
+          </div>
+        </details>
 
         <!-- Jog Controls -->
         <div class="jog-section">
@@ -283,43 +314,6 @@
           <button class="btn btn-xs" onclick="gcodeQuick('M115')">Info</button>
           <button class="btn btn-xs danger" onclick="gcodeQuick('M0')">E-Stop</button>
         </div>
-      </div>
-    </section>
-
-    <!-- ——— COL 3 TOP: GCode Visualizer ——— -->
-    <section class="card" id="viz-panel">
-      <div class="card-header">
-        <span class="card-icon">🗺</span>
-        <h2>GCode Visualizer</h2>
-        <div class="viz-toolbar">
-          <label class="chart-tw-opt">
-            <input type="radio" name="viz-mode" value="home" checked onchange="setVizMode('home')" /> Homing
-          </label>
-          <label class="chart-tw-opt">
-            <input type="radio" name="viz-mode" value="both" onchange="setVizMode('both')" /> + Process
-          </label>
-        </div>
-        <span class="viz-pos-display mono" id="viz-pos">X— Y—</span>
-      </div>
-      <div class="viz-card-body">
-        <svg id="gcode-viz" class="viz-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
-          <!-- Bed (380×380mm) — rendered in JS on init -->
-          <rect id="viz-bed" class="viz-bed" x="10" y="10" width="380" height="380" />
-          <!-- Travel limits (270×270mm centered at 55,55 in svg coords) -->
-          <rect id="viz-travel" class="viz-travel" x="10" y="10" width="270" height="270" />
-          <!-- Center crosshair -->
-          <g id="viz-crosshair">
-            <line class="viz-cross" x1="143" y1="0" x2="143" y2="400" />
-            <line class="viz-cross" x1="0" y1="143" x2="400" y2="143" />
-          </g>
-          <!-- Paths rendered by JS -->
-          <g id="viz-home-path"></g>
-          <g id="viz-process-path"></g>
-          <!-- Live position -->
-          <circle id="viz-live-dot" class="viz-live-dot" cx="-50" cy="-50" r="5" />
-          <!-- Trail -->
-          <polyline id="viz-trail" class="viz-trail" points="" />
-        </svg>
       </div>
     </section>
 
@@ -464,31 +458,6 @@
           <span class="spacer"></span>
           <span class="furnace-state-label" id="furnace-state">DISABLED</span>
         </div>
-      </div>
-    </section>
-
-    <!-- ——— COL 2 BOTTOM: Camera Streams ——— -->
-    <section class="card" id="cameras-panel">
-      <div class="card-header">
-        <span class="card-icon">📷</span>
-        <h2>Camera Streams</h2>
-        <span class="card-subtitle">configure in config.py</span>
-      </div>
-      <div class="card-body">
-        {% if cameras_list %}
-        {% for cam in cameras_list %}
-        <div class="camera-feed">
-          <img src="/stream/camera/{{ cam.id }}" class="camera-img" alt="{{ cam.id }}" />
-          <div class="camera-label">{{ cam.id }} ({{ cam.type }})</div>
-        </div>
-        {% endfor %}
-        {% else %}
-        <div class="empty-state">
-          <div class="empty-icon">📷</div>
-          <div class="empty-msg">No cameras configured</div>
-          <div class="empty-sub">Add entries to <code>config.CAMERAS</code></div>
-        </div>
-        {% endif %}
       </div>
     </section>
 
@@ -710,7 +679,6 @@
         relayChannels: {{ relay_channels | tojson }},
         tempChannels:  {{ temp_channels | tojson }},
         trafficRelays: {{ traffic_relays | tojson }},
-        cameras:       {{ cameras_list | tojson }},
         controlToken:  {{ control_token | tojson }}
     };
 

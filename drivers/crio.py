@@ -10,8 +10,10 @@ import config
 # ---------------------------------------------------------------------------
 
 _lock = threading.Lock()
-_target_relays = [False] * 16
-_target_emissivity = 85
+_NUM_RELAYS = 16
+_target_relays = [False] * _NUM_RELAYS
+_target_lock = threading.Lock()
+_target_emissivity = 100
 
 _telemetry_lock = threading.Lock()
 _latest_telemetry = {
@@ -41,6 +43,100 @@ _background_lock = threading.Lock()
 
 _UDP_ONLINE_SECONDS = 2.0
 _TCP_ONLINE_SECONDS = 5.0
+
+def _normalize_emissivity_percent(value) -> int:
+    percent = float(value)
+    if 0 < percent <= 1:
+        percent *= 100
+    if percent <= 0 or percent > 100:
+        raise ValueError("Emissivity must be 0.01..1.00 or 1..100 percent")
+    return int(round(percent))
+
+def _coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("1", "true", "on", "yes"):
+            return True
+        if lowered in ("0", "false", "off", "no"):
+            return False
+    return bool(value)
+
+def _relay_vector(value, width: int = _NUM_RELAYS) -> list:
+    relays = [None] * width
+    if isinstance(value, dict):
+        for i in range(width):
+            key = f"relay_{i}"
+            if key in value:
+                relays[i] = _coerce_bool(value[key])
+            elif str(i) in value:
+                relays[i] = _coerce_bool(value[str(i)])
+        return relays
+    if isinstance(value, (list, tuple)):
+        for i, relay_value in enumerate(value[:width]):
+            relays[i] = _coerce_bool(relay_value)
+    return relays
+
+def _relay_dict(values: list, include_unknown: bool = True) -> dict:
+    return {
+        f"relay_{i}": values[i]
+        for i in range(min(len(values), _NUM_RELAYS))
+        if include_unknown or values[i] is not None
+    }
+
+def _known_relay_values(values: list) -> bool:
+    return any(value is not None for value in values)
+
+def _relay_status_from_payload(payload: dict) -> dict:
+    relay_command = _relay_vector(payload.get("relay_command"))
+    command_source = "udp"
+    if not _known_relay_values(relay_command):
+        with _target_lock:
+            relay_command = list(_target_relays)
+        command_source = "host_last_accepted"
+
+    relay_last_written = _relay_vector(payload.get("relay_last_written"))
+    relay_last_write_error = payload.get("relay_last_write_error")
+    if relay_last_write_error == "":
+        relay_last_write_error = None
+    mismatch_channels = [
+        f"relay_{i}"
+        for i, (commanded, written) in enumerate(zip(relay_command, relay_last_written))
+        if commanded is not None and written is not None and commanded != written
+    ]
+    written_available = _known_relay_values(relay_last_written)
+
+    relay_last_written_dict = _relay_dict(relay_last_written, include_unknown=False)
+    return {
+        "relay_command": _relay_dict(relay_command),
+        "relay_command_source": command_source,
+        "relay_last_written": relay_last_written_dict,
+        "relay_last_write_time": payload.get("relay_last_write_time"),
+        "relay_last_write_error": relay_last_write_error,
+        "relay_write_pending": bool(mismatch_channels),
+        "relay_write_mismatch_channels": mismatch_channels,
+        "relay_write_confirmed": written_available and relay_last_write_error is None and not mismatch_channels,
+        # Backward-compatible alias for UI code that expects relay state. This is
+        # intentionally the last successful DAQmx write, not the accepted command.
+        "relays": relay_last_written_dict,
+    }
+
+def _latest_relay_command_targets() -> list:
+    with _telemetry_lock:
+        relay_command = _relay_vector(_latest_telemetry["parsed_json"].get("relay_command"))
+    with _target_lock:
+        fallback = list(_target_relays)
+    if not _known_relay_values(relay_command):
+        return fallback
+    return [
+        bool(value) if value is not None else fallback[i]
+        for i, value in enumerate(relay_command)
+    ]
 
 # ---------------------------------------------------------------------------
 # TCP Control
@@ -245,6 +341,8 @@ def _offline_status(now: float, arrival: float, parse_error: str | None, rx_coun
         "last_udp_age_s": last_age,
         "last_udp_arrival_time": arrival,
         "parse_error": parse_error,
+        "pyro_info": {},
+        "emissivity_cmd": _target_emissivity,
         **tcp,
     }
 
@@ -262,8 +360,11 @@ def get_all_status() -> dict:
         connected = udp_online and parse_error is None
 
     tcp = _tcp_snapshot(now, include_payload=False)
+    relay_status = _relay_status_from_payload(d)
     if not connected:
-        return _offline_status(now, arrival, parse_error, rx_count, tcp)
+        status = _offline_status(now, arrival, parse_error, rx_count, tcp)
+        status.update(relay_status)
+        return status
 
     # Requirement 5: Accept exact keys
     tc = d.get("mod2_tc", [])
@@ -275,7 +376,6 @@ def get_all_status() -> dict:
         "connected": True,
         "timestamp": d.get("timestamp"),
         "sequence": d.get("sequence"),
-        "relays": {f"relay_{i}": r for i, r in enumerate(_target_relays)},
         "temperatures": {
             "temp_0": tc[0] if len(tc) > 0 else 0.0,
             "temp_1": tc[1] if len(tc) > 1 else 0.0,
@@ -300,23 +400,35 @@ def get_all_status() -> dict:
         "last_udp_age_s": round(now - arrival, 3) if arrival else None,
         "last_udp_addr": last_addr,
         "last_udp_len": last_len,
+        **relay_status,
         **tcp,
     }
 
 def set_relay(channel_id: str, state: bool) -> dict:
     try:
         idx = int(channel_id.replace("relay_", ""))
-        _target_relays[idx] = state
-        return _send_tcp_command({
+        if idx < 0 or idx >= _NUM_RELAYS:
+            raise ValueError(f"Relay index out of range: {channel_id}")
+        relays = _latest_relay_command_targets()
+        relays[idx] = bool(state)
+        response = _send_tcp_command({
             "action": "set_relays",
-            "relays": _target_relays
+            "relays": relays
         })
+        if response.get("ok"):
+            with _target_lock:
+                _target_relays[:] = relays
+        return response
     except Exception as e: return {"ok": False, "error": str(e)}
 
 def set_emissivity(value: int) -> dict:
     global _target_emissivity
-    _target_emissivity = value
-    return _send_tcp_command({
-        "action": "set_emissivity",
-        "percent": value
-    })
+    try:
+        percent = _normalize_emissivity_percent(value)
+        _target_emissivity = percent
+        return _send_tcp_command({
+            "action": "set_emissivity",
+            "percent": percent
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

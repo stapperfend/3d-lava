@@ -44,7 +44,6 @@ def _template_context():
         relay_channels = config.RELAY_CHANNELS,
         temp_channels  = config.TEMP_CHANNELS,
         traffic_relays = config.TRAFFIC_RELAYS,
-        cameras_list   = [{"id": k, "type": v["type"]} for k, v in config.CAMERAS.items()],
         poll_interval  = config.STATUS_POLL_INTERVAL_MS,
         furnace_max    = config.FURNACE_MAX_SP,
         furnace_min    = config.FURNACE_MIN_SP,
@@ -103,19 +102,12 @@ def api_crio_raw_data():
 def api_crio_relay(channel_id):
     data  = _json_body()
     state = bool(data.get("state", False))
-    res   = crio.set_relay(channel_id, state)
-    if res.get("ok"):
-        _RELAYS_LATEST[channel_id] = state
-    return jsonify(res)
+    return jsonify(crio.set_relay(channel_id, state))
 
 @app.route("/api/crio/emissivity", methods=["POST"])
 def api_crio_emissivity():
     data  = _json_body()
-    try:
-        value = int(data.get("value", 85))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "Invalid emissivity value"}), 400
-    return jsonify(crio.set_emissivity(value))
+    return jsonify(crio.set_emissivity(data.get("value", 1.0)))
 
 @app.route("/api/crio/debug")
 def api_crio_debug():
@@ -300,7 +292,6 @@ _LATEST = {
     "furnace": {},
 }
 _LATEST_LOCK = threading.Lock()
-_RELAYS_LATEST = {}  # Cache relay states since we no longer read them from hardware for the UI
 
 def _update_latest(key, data):
     with _LATEST_LOCK:
@@ -339,12 +330,19 @@ def _broadcaster_crio():
             tr_red    = config.TRAFFIC_RELAYS["red"]
             tr_yellow = config.TRAFFIC_RELAYS["yellow"]
             tr_green  = config.TRAFFIC_RELAYS["green"]
-            red_on    = bool(_RELAYS_LATEST.get(tr_red,    False))
-            yellow_on = bool(_RELAYS_LATEST.get(tr_yellow, False))
-            green_on  = bool(_RELAYS_LATEST.get(tr_green,  False))
+            relays_written = st.get("relay_last_written") or st.get("relays") or {}
+            red_on    = bool(relays_written.get(tr_red,    False))
+            yellow_on = bool(relays_written.get(tr_yellow, False))
+            green_on  = bool(relays_written.get(tr_green,  False))
             socketio.emit("status_update", {
                 "crio": st,
-                "traffic": {"red": red_on, "yellow": yellow_on, "green": green_on}
+                "traffic": {
+                    "red": red_on,
+                    "yellow": yellow_on,
+                    "green": green_on,
+                    "write_pending": bool(st.get("relay_write_pending")),
+                    "write_error": st.get("relay_last_write_error"),
+                }
             })
         except Exception as e:
             print(f"[broadcaster-crio] {e}")
@@ -371,23 +369,37 @@ def _history_logger():
             c_st = _LATEST["crio"]
         if not f_st: continue
         crio_temps = dict(c_st.get("temperatures", {}))
+        crio_pyrometer = dict(c_st.get("pyro_info") or {})
         history.append({
             "t":       time.time(),
+            "furnace_pyrometer_temp_c": _numeric_or_none(f_st.get("furnace_pyrometer_temp_c")),
+            "furnace_actual_display": f_st.get("actual"),
             "temp":    _numeric_or_none(f_st.get("actual")),
+            "setpoint": _numeric_or_none(f_st.get("setpoint")),
+            "enabled": f_st.get("enabled"),
+            "ctrl_mode": f_st.get("ctrl_mode"),
             "power":   f_st.get("actual_power"),
             "current": f_st.get("actual_current"),
             "freq":    f_st.get("actual_freq"),
+            "phase_angle": f_st.get("phase_angle"),
             "water":   f_st.get("water_flow"),
             "energy":  f_st.get("actual_energy"),
             "cap_v":   f_st.get("cap_voltage"),
             "dc_v":    f_st.get("dc_voltage"),
             "fsm":     f_st.get("fsm_state"),
-            "status":  f_st.get("status_fsm_raw"),
+            "status_word": f_st.get("status_word"),
+            "process_status": f_st.get("process_status"),
+            "error_word": f_st.get("error_word"),
+            "error_word_prog": f_st.get("error_word_prog"),
+            "heating_program": f_st.get("heating_program"),
+            "heating_program_phase": f_st.get("heating_program_phase"),
             "crio_temps": crio_temps,
             "crio_tc_raw_mv": {k: crio_temps.get(k) for k in ("temp_0", "temp_1", "temp_2", "temp_3")},
             "crio_cjc_temp_c": c_st.get("cjc_temp_c"),
             "crio_cjc_source": c_st.get("cjc_source"),
             "crio_mod4":  dict(c_st.get("mod4", {})),
+            "crio_pyrometer": crio_pyrometer,
+            "crio_emissivity_set_percent": c_st.get("emissivity_cmd"),
         })
 
 if __name__ == "__main__":
