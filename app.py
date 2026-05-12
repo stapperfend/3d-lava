@@ -12,6 +12,7 @@ Serves the dashboard UI and REST + SocketIO APIs for:
 """
 
 import json
+import os
 import threading
 import time
 
@@ -26,8 +27,11 @@ from drivers import crio, duet, furnace
 # App setup
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "process_control_secret"
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "process_control_secret")
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
+
+_SERVICES_STARTED = False
+_SERVICES_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Template helpers
@@ -47,7 +51,35 @@ def _template_context():
         furnace_num_programs = config.FURNACE_NUM_PROGRAMS,
         furnace_num_phases   = config.FURNACE_NUM_PHASES,
         furnace_presets      = config.FURNACE_PROGRAM_PRESETS,
+        control_token        = getattr(config, "CONTROL_API_TOKEN", ""),
     )
+
+def _json_body():
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+def _numeric_or_none(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+@app.before_request
+def _require_control_token():
+    token = getattr(config, "CONTROL_API_TOKEN", "")
+    if not token or request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return None
+    if not request.path.startswith("/api/"):
+        return None
+    supplied = request.headers.get("X-Control-Token") or request.args.get("token")
+    if supplied != token:
+        return jsonify({"ok": False, "error": "Unauthorized control request"}), 401
+    return None
+
+@app.before_request
+def _start_services_on_first_request():
+    start_background_services()
+    return None
 
 # ---------------------------------------------------------------------------
 # Routes — Dashboard
@@ -69,7 +101,7 @@ def api_crio_raw_data():
 
 @app.route("/api/crio/relay/<channel_id>", methods=["POST"])
 def api_crio_relay(channel_id):
-    data  = request.get_json(force=True)
+    data  = _json_body()
     state = bool(data.get("state", False))
     res   = crio.set_relay(channel_id, state)
     if res.get("ok"):
@@ -78,8 +110,11 @@ def api_crio_relay(channel_id):
 
 @app.route("/api/crio/emissivity", methods=["POST"])
 def api_crio_emissivity():
-    data  = request.get_json(force=True)
-    value = int(data.get("value", 85))
+    data  = _json_body()
+    try:
+        value = int(data.get("value", 85))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid emissivity value"}), 400
     return jsonify(crio.set_emissivity(value))
 
 @app.route("/api/crio/debug")
@@ -97,7 +132,7 @@ def api_duet_status():
 
 @app.route("/api/duet/gcode", methods=["POST"])
 def api_duet_gcode():
-    data = request.get_json(force=True)
+    data = _json_body()
     cmd  = str(data.get("command", "")).strip()
     if not cmd:
         return jsonify({"ok": False, "error": "Empty command"})
@@ -113,7 +148,7 @@ def api_duet_gcode_get(name):
 def api_duet_gcode_save(name):
     if name not in ("home", "process"):
         return jsonify({"ok": False, "error": "Unknown gcode name"}), 400
-    data = request.get_json(force=True)
+    data = _json_body()
     return jsonify(duet.save_gcode(name, str(data.get("text", ""))))
 
 @app.route("/api/duet/home/run", methods=["POST"])
@@ -145,19 +180,27 @@ def api_furnace_status():
 
 @app.route("/api/furnace/setpoint", methods=["POST"])
 def api_furnace_setpoint():
-    data = request.get_json(force=True)
-    return jsonify(furnace.set_setpoint(float(data.get("setpoint", 0))))
+    data = _json_body()
+    try:
+        setpoint = float(data.get("setpoint", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid setpoint"}), 400
+    return jsonify(furnace.set_setpoint(setpoint))
 
 @app.route("/api/furnace/enable", methods=["POST"])
 def api_furnace_enable():
-    data   = request.get_json(force=True)
+    data   = _json_body()
     return jsonify(furnace.set_enable(bool(data.get("enable", False))))
 
 @app.route("/api/furnace/mode", methods=["POST"])
 def api_furnace_mode():
-    data    = request.get_json(force=True)
-    mode    = int(data.get("mode", 0))
-    return jsonify(furnace.set_mode(mode))
+    data = _json_body()
+    try:
+        mode = int(data.get("mode", 0))
+        prog_no = int(data.get("prog_no", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid furnace mode request"}), 400
+    return jsonify(furnace.set_mode(mode, prog_no=prog_no))
 
 @app.route("/api/furnace/ack_error", methods=["POST"])
 def api_furnace_ack_error():
@@ -169,16 +212,21 @@ def api_furnace_reset_energy():
 
 @app.route("/api/furnace/manual", methods=["POST"])
 def api_furnace_manual():
-    data = request.get_json(force=True)
-    return jsonify(furnace.set_manual_control(
-        float(data.get("power_pct",   0)),
-        float(data.get("current_pct", 0)),
-    ))
+    data = _json_body()
+    try:
+        power_pct = float(data.get("power_pct", 0))
+        current_pct = float(data.get("current_pct", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid manual control values"}), 400
+    return jsonify(furnace.set_manual_control(power_pct, current_pct))
 
 @app.route("/api/furnace/start_program", methods=["POST"])
 def api_furnace_start_program():
-    data    = request.get_json(force=True)
-    prog_no = int(data.get("prog_no", 1))
+    data = _json_body()
+    try:
+        prog_no = int(data.get("prog_no", 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid program number"}), 400
     return jsonify(furnace.start_program(prog_no))
 
 @app.route("/api/furnace/console")
@@ -187,7 +235,7 @@ def api_furnace_console():
 
 @app.route("/api/furnace/console/command", methods=["POST"])
 def api_furnace_console_command():
-    data = request.get_json(force=True)
+    data = _json_body()
     cmd  = str(data.get("command", ""))
     return jsonify({"ok": furnace.send_console_command(cmd)})
 
@@ -195,9 +243,18 @@ def api_furnace_console_command():
 def api_furnace_program_get(prog_no):
     return jsonify(furnace.get_program(prog_no))
 
+@app.route("/api/furnace/program/select", methods=["POST"])
+def api_furnace_program_select():
+    data = _json_body()
+    try:
+        prog_no = int(data.get("prog_no", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid program number"}), 400
+    return jsonify(furnace.set_selected_program(prog_no))
+
 @app.route("/api/furnace/program/<int:prog_no>", methods=["POST"])
 def api_furnace_program_set(prog_no):
-    data   = request.get_json(force=True)
+    data   = _json_body()
     phases = data.get("phases", [])
     return jsonify(furnace.set_program(prog_no, phases))
 
@@ -209,6 +266,10 @@ def api_furnace_programs_list():
 def api_furnace_raw_packets():
     return jsonify(furnace.get_raw_packets())
 
+@app.route("/api/furnace/debug")
+def api_furnace_debug():
+    return jsonify(furnace.get_debug_info())
+
 # ---------------------------------------------------------------------------
 # Routes — History / Process Chart
 # ---------------------------------------------------------------------------
@@ -217,6 +278,11 @@ def api_history():
     window = request.args.get("window", type=float)
     samples = history.get_last_seconds(window) if window else history.get_all()
     return jsonify(samples)
+
+@app.route("/api/history/clear", methods=["POST"])
+def api_history_clear():
+    history.clear()
+    return jsonify({"ok": True})
 
 # ---------------------------------------------------------------------------
 # Routes — Camera streams (placeholder)
@@ -239,6 +305,19 @@ _RELAYS_LATEST = {}  # Cache relay states since we no longer read them from hard
 def _update_latest(key, data):
     with _LATEST_LOCK:
         _LATEST[key] = data
+
+def start_background_services():
+    global _SERVICES_STARTED
+    with _SERVICES_LOCK:
+        if _SERVICES_STARTED:
+            return
+        crio.start_background_tasks()
+        furnace.start_background_tasks()
+        threading.Thread(target=_broadcaster_furnace, daemon=True).start()
+        threading.Thread(target=_broadcaster_crio,    daemon=True).start()
+        threading.Thread(target=_broadcaster_duet,    daemon=True).start()
+        threading.Thread(target=_history_logger,      daemon=True).start()
+        _SERVICES_STARTED = True
 
 def _broadcaster_furnace():
     interval = config.FURNACE_UPDATE_MS / 1000.0
@@ -293,7 +372,7 @@ def _history_logger():
         if not f_st: continue
         history.append({
             "t":       time.time(),
-            "temp":    f_st.get("actual"),
+            "temp":    _numeric_or_none(f_st.get("actual")),
             "power":   f_st.get("actual_power"),
             "current": f_st.get("actual_current"),
             "freq":    f_st.get("actual_freq"),
@@ -304,16 +383,8 @@ def _history_logger():
             "fsm":     f_st.get("fsm_state"),
             "status":  f_st.get("status_fsm_raw"),
             "crio_temps": dict(c_st.get("temperatures", {})),
+            "crio_mod4":  dict(c_st.get("mod4", {})),
         })
-
-# Start background tasks
-crio.start_background_tasks()
-
-# Start broadcasters
-threading.Thread(target=_broadcaster_furnace, daemon=True).start()
-threading.Thread(target=_broadcaster_crio,    daemon=True).start()
-threading.Thread(target=_broadcaster_duet,    daemon=True).start()
-threading.Thread(target=_history_logger,      daemon=True).start()
 
 if __name__ == "__main__":
     print("\n" + "="*55)

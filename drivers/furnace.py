@@ -22,6 +22,11 @@ import time
 
 import config
 
+_DriverThread = threading.Thread
+_DriverLock = threading.Lock
+_DriverSocket = socket.socket
+_sleep = time.sleep
+
 # ─────────────────────────────────────────────────────────────
 # Packet constants
 # ─────────────────────────────────────────────────────────────
@@ -156,7 +161,7 @@ def _unpack_phase(data: bytes, offset: int) -> dict:
 # ─────────────────────────────────────────────────────────────
 # Shared state
 # ─────────────────────────────────────────────────────────────
-_lock = threading.Lock()
+_lock = _DriverLock()
 
 _ctrl = {
     "heating_on":   False,
@@ -175,6 +180,8 @@ _last_prog_done = False
 _ctrl["setpoint_c"] = 0.0    # °C — for mock sim + display
 
 _status = {
+    "connected":      False,
+    "comm_error":     "No valid furnace packet received yet",
     "actual_temp":    0.0,
     "actual":         0.0,
     "actual_power":   0.0,
@@ -188,6 +195,7 @@ _status = {
     "fsm_state":      "Init",
     "ready":          False,
     "active":         False,
+    "icc_error":      False,
     "estop":          False,
     "prog_done":      False,
     "prog_error":     False,
@@ -201,6 +209,15 @@ _status = {
     "error_word_prog": 0,
     "phase_energies":  [0] * 8,
     "phase_temps":     [0.0] * 8,
+    "tx_count":        0,
+    "rx_count":        0,
+    "parse_failures":  0,
+    "last_tx_time":    0.0,
+    "last_rx_time":    0.0,
+    "last_valid_rx_time": 0.0,
+    "last_rx_len":     0,
+    "last_rx_addr":    None,
+    "last_rx_prefix":  "",
 }
 
 # In-memory heating program store (100 programs × 8 phases)
@@ -210,34 +227,69 @@ def _empty_program(prog_no: int) -> list[dict]:
     return [_default_phase(i) for i in range(config.FURNACE_NUM_PHASES)]
 
 _last_tx_bytes: bytes = b"\x00" * 28
-_last_rx_bytes: bytes = b"\x00" * INPUT_PACKET_SIZE  # 132 bytes
+_last_rx_bytes: bytes = b"\x00" * INPUT_PACKET_SIZE
+_last_any_rx_bytes: bytes = b""
 
 # Console buffer (Service 4661)
 _console_logs = []
-_console_lock = threading.Lock()
+_console_lock = _DriverLock()
 _console_started = False
+_background_started = False
+_background_lock = _DriverLock()
+
+def _make_udp_socket(label: str, bind_port: int = 0, timeout: float | None = None,
+                     force_wildcard: bool = False, preferred_ip: str | None = None) -> socket.socket:
+    """Create a UDP socket, preferring a configured local IP but falling back to wildcard."""
+    sock = _DriverSocket(socket.AF_INET, socket.SOCK_DGRAM)
+    if timeout is not None:
+        sock.settimeout(timeout)
+
+    host_ip = "" if force_wildcard else (preferred_ip if preferred_ip is not None else getattr(config, "HOST_IP", ""))
+    if host_ip:
+        try:
+            sock.bind((host_ip, bind_port))
+            return sock
+        except OSError as e:
+            print(f"[{label}] Could not bind to {host_ip}:{bind_port}: {e}. Falling back to 0.0.0.0")
+
+    sock.bind(("", bind_port))
+    return sock
+
+def _sendto_or_rebind(sock: socket.socket, payload: bytes, dest: tuple[str, int], label: str,
+                      bind_port: int = 0, timeout: float | None = None) -> socket.socket:
+    """Send UDP data; if Windows rejects the bound address, retry on wildcard."""
+    try:
+        sock.sendto(payload, dest)
+        return sock
+    except OSError as e:
+        if getattr(e, "winerror", None) != 10049:
+            raise
+        host_ip = getattr(config, "HOST_IP", "")
+        print(f"[{label}] HOST_IP {host_ip!r} cannot reach {dest[0]}:{dest[1]} ({e}). Retrying with 0.0.0.0")
+        try:
+            sock.close()
+        except Exception:
+            pass
+        retry = _make_udp_socket(label, bind_port=bind_port, timeout=timeout, force_wildcard=True)
+        retry.sendto(payload, dest)
+        return retry
 
 def _console_loop():
     """Background thread to listen for console messages on port 4661."""
     global _console_logs
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(2.0)
-    
-    # Bind to physical interface if specified
-    host_ip = getattr(config, "HOST_IP", "")
-    try:
-        sock.bind((host_ip, 0)) # OS picks a free source port
-    except Exception as e:
-        print(f"[furnace console] Could not bind: {e}")
-        sock.bind(("", 0))
+    sock = _make_udp_socket("furnace console", timeout=2.0)
 
     # Initiate session
     dest = (config.FURNACE_IP, getattr(config, "FURNACE_CONSOLE_PORT", 4661))
     print(f"[furnace console] Session starting on port {dest[1]}...")
-    sock.sendto(b"HELLO", dest)
+    sock = _sendto_or_rebind(sock, b"HELLO\r\n", dest, "furnace console", timeout=2.0)
+    last_hello = time.time()
 
     while True:
         try:
+            if time.time() - last_hello > 5.0:
+                sock = _sendto_or_rebind(sock, b"HELLO\r\n", dest, "furnace console", timeout=2.0)
+                last_hello = time.time()
             data, addr = sock.recvfrom(4096)
             msg = data.decode("ascii", errors="replace").strip()
             if msg:
@@ -253,7 +305,7 @@ def _console_loop():
             pass
         except Exception as e:
             print(f"[furnace console] Error: {e}")
-            time.sleep(1.0)
+            _sleep(1.0)
 
 # ─────────────────────────────────────────────────────────────
 # Packet builders / parsers
@@ -286,12 +338,15 @@ def _decode_error_bits(err_word: int) -> list[dict]:
     return active
 
 def _parse_input_packet(data: bytes) -> dict | None:
-    if len(data) < 60: # Minimum to get through error_word field
+    packet_len = len(data)
+    if packet_len < 60: # Minimum to get through error_word field
         with _lock:
-            _status["error"] = f"Packet too short: {len(data)} bytes (expected {INPUT_PACKET_SIZE})"
+            _status["last_error_msg"] = f"Packet too short: {packet_len} bytes (expected {INPUT_PACKET_SIZE})"
         return None
-    # Pad data with zeros if it's shorter than the full structure to prevent unpack errors
-    if len(data) < INPUT_PACKET_SIZE:
+
+    # Some ICC firmware revisions omit trailing bytes. The fields used by the
+    # dashboard are present before the suffix, so preserve the old tolerant path.
+    if packet_len < INPUT_PACKET_SIZE:
         data = data.ljust(INPUT_PACKET_SIZE, b"\x00")
 
     if data[:8] != PREFIX:
@@ -300,11 +355,12 @@ def _parse_input_packet(data: bytes) -> dict | None:
             _status["last_error_msg"] = f"Bad signature: pfx='{bad_pre}'"
         return None
     
-    # Suffix check at the end of the received packet
-    if len(data) >= 8 and data[-8:] not in (SUFFIX, ALT_SUFFIX):
-        bad_sfx = data[-8:].hex()
+    # Suffix may be at the physical end or at the canonical 134-byte offset.
+    suffix_candidates = (data[packet_len-8:packet_len], data[INPUT_PACKET_SIZE-8:INPUT_PACKET_SIZE])
+    if packet_len >= 8 and SUFFIX not in suffix_candidates and ALT_SUFFIX not in suffix_candidates:
+        bad_sfx = data[max(0, packet_len-8):packet_len].hex()
         with _lock:
-            _status["last_error_msg"] = f"Bad suffix: sfx=0x{bad_sfx} at len={len(data)}"
+            _status["last_error_msg"] = f"Bad suffix: sfx=0x{bad_sfx} at len={packet_len}"
         return None
 
     try:
@@ -333,17 +389,24 @@ def _parse_input_packet(data: bytes) -> dict | None:
         p_energies = list(struct.unpack_from(">8I", data, 62))
         p_temps    = list(struct.unpack_from(">8f", data, 94))
         
+        # Apply offset and "Cold" logic
+        display_temp = temp + config.FURNACE_TEMP_OFFSET
+        if temp < config.FURNACE_COLD_THRESHOLD:
+            display_temp = "Cold"
+        else:
+            display_temp = round(display_temp, 1)
+
         res = {
             "ready":          bool(sw_inverter & SBIT_READY),
             "active":         bool(sw_inverter & SBIT_ACTIVE),
-            "error":          bool(sw_inverter & SBIT_ERROR),
+            "icc_error":      bool(sw_inverter & SBIT_ERROR),
             "estop":          bool(sw_inverter & SBIT_ESTOP),
             "prog_done":      bool(sw_inverter & SBIT_PROG_DONE),
             "prog_error":     bool(sw_inverter & SBIT_PROG_ERR),
             "heartbeat":      bool(sw_inverter & SBIT_HEARTBEAT),
             "fsm_state":      FSM_STATES.get(fsm_raw, f"State{fsm_raw}"),
-            "actual_temp":    round(temp, 1),
-            "actual":         round(temp, 1),
+            "actual_temp":    display_temp,
+            "actual":         display_temp,
             "actual_power":   round(power, 1),
             "actual_current": round(i_actual, 2),
             "actual_freq":    round(freq, 1),
@@ -362,6 +425,8 @@ def _parse_input_packet(data: bytes) -> dict | None:
             "phase_energies":  p_energies,
             "phase_temps":     p_temps,
             "status_fsm_raw": fsm_raw,
+            "connected":      True,
+            "comm_error":     None,
             "last_error_msg": None,
         }
 
@@ -421,21 +486,13 @@ def _parse_heatprog_response(data: bytes) -> list[dict] | None:
     return phases
 
 def _service_send_recv(pkt: bytes) -> bytes | None:
+    sock = None
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # Use a more relaxed timeout for the service protocol
         timeout = getattr(config, "FURNACE_SERVICE_TIMEOUT", 2.0)
-        sock.settimeout(timeout)
-        
-        # Bind to physical interface if specified
-        host_ip = getattr(config, "HOST_IP", "")
-        if host_ip:
-            try:
-                sock.bind((host_ip, 0)) # Port 0 = OS picks a free port
-            except Exception as e:
-                print(f"[furnace service] Warning: Could not bind to {host_ip}: {e}")
-        
-        sock.sendto(pkt, (config.FURNACE_IP, config.FURNACE_SERVICE_PORT))
+        sock = _make_udp_socket("furnace service", timeout=timeout)
+        dest = (config.FURNACE_IP, config.FURNACE_SERVICE_PORT)
+        sock = _sendto_or_rebind(sock, pkt, dest, "furnace service", timeout=timeout)
         data, _ = sock.recvfrom(4096)
         return data
     except socket.timeout:
@@ -445,7 +502,8 @@ def _service_send_recv(pkt: bytes) -> bytes | None:
         print(f"[furnace service] Communication error: {e}")
         return None
     finally:
-        sock.close()
+        if sock is not None:
+            sock.close()
 
 # ─────────────────────────────────────────────────────────────
 # Mock RX packet builder (for inspector in mock mode)
@@ -454,18 +512,21 @@ def _service_send_recv(pkt: bytes) -> bytes | None:
 # Background IO loops
 # ─────────────────────────────────────────────────────────────
 def _real_io_loop():
-    global _last_tx_bytes, _last_rx_bytes
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(config.FURNACE_TIMEOUT)
-    try:
-        sock.bind((getattr(config, "HOST_IP", ""), config.FURNACE_PORT_RECV))
-    except Exception as e:
-        print(f"[furnace driver] Could not bind to HOST_IP: {e}. Falling back to 0.0.0.0")
-        sock.bind(("", config.FURNACE_PORT_RECV))
+    global _last_tx_bytes, _last_rx_bytes, _last_any_rx_bytes
+    bind_ip = getattr(config, "FURNACE_BIND_IP", "")
+    sock = _make_udp_socket(
+        "furnace driver",
+        bind_port=config.FURNACE_PORT_RECV,
+        timeout=config.FURNACE_TIMEOUT,
+        preferred_ip=bind_ip,
+    )
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    with _lock:
+        _status["bound_addr"] = f"{sock.getsockname()[0]}:{sock.getsockname()[1]}"
     hb = False
     hb_last = time.time()
     while True:
-        time.sleep(0.05)
+        _sleep(0.05)
         now = time.time()
         if now - hb_last >= 1.0:
             hb = not hb
@@ -475,35 +536,69 @@ def _real_io_loop():
             dest = (config.FURNACE_IP, config.FURNACE_PORT_SEND)
             _last_tx_bytes = pkt
         try:
-            sock.sendto(pkt, dest)
+            new_sock = _sendto_or_rebind(
+                sock,
+                pkt,
+                dest,
+                "furnace driver",
+                bind_port=config.FURNACE_PORT_RECV,
+                timeout=config.FURNACE_TIMEOUT,
+            )
+            if new_sock is not sock:
+                sock = new_sock
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                with _lock:
+                    _status["bound_addr"] = f"{sock.getsockname()[0]}:{sock.getsockname()[1]}"
+            with _lock:
+                _status["tx_count"] += 1
+                _status["last_tx_time"] = time.time()
             # if hb != hb_last: # Print once per heartbeat toggle (every 1s)
             #     cw_dbg = _build_ctrl_word(_ctrl, hb)
             #     # print(f"[furnace TX] CW=0x{cw_dbg:04X} SP_I={_ctrl['current_sp']}% SP_P={_ctrl['power_sp']}% HB={hb}")
         except Exception as e:
             with _lock:
-                _status["error"] = f"TX error: {e}"
+                _status["connected"] = False
+                _status["comm_error"] = f"TX error: {e}"
             continue
         try:
             data, addr = sock.recvfrom(512)
-            # update raw bytes even if full parse fails, so UI can show it
-            # Only accept data that is at least INPUT_PACKET_SIZE bytes (132) to avoid
-            # storing our own 28-byte TX packets as RX data (UDP echo on same port)
-            if len(data) >= INPUT_PACKET_SIZE and data[:8] == PREFIX:
+            now_rx = time.time()
+            with _lock:
+                _last_any_rx_bytes = data
+                _status["rx_count"] += 1
+                _status["last_rx_time"] = now_rx
+                _status["last_rx_len"] = len(data)
+                _status["last_rx_addr"] = f"{addr[0]}:{addr[1]}"
+                _status["last_rx_prefix"] = data[:8].decode("ascii", errors="replace")
+
+            # Only accept data that has the furnace signature to avoid
+            # storing our own 28-byte TX packets as valid RX data if the network echoes.
+            if len(data) >= 60 and data[:8] == PREFIX:
                 with _lock:
-                    _last_rx_bytes = data[:INPUT_PACKET_SIZE]
+                    _last_rx_bytes = data[:INPUT_PACKET_SIZE].ljust(INPUT_PACKET_SIZE, b"\x00")
             
             parsed  = _parse_input_packet(data)
             if parsed:
                 with _lock:
                     _status.update(parsed)
+                    _status["last_valid_rx_time"] = now_rx
                     # if hb != hb_last:
                     #     # print(f"[furnace RX] FSM={_status['fsm_state']} (raw {parsed.get('status_fsm_raw')}) DC={_status['dc_voltage']}V")
+            else:
+                with _lock:
+                    _status["parse_failures"] += 1
+                    _status["connected"] = False
+                    _status["comm_error"] = _status.get("last_error_msg") or "Invalid furnace packet"
         except socket.timeout:
             with _lock:
-                _status["error"] = f"No response from ICC at {config.FURNACE_IP}"
+                last_valid = _status.get("last_valid_rx_time", 0.0)
+                if not last_valid or time.time() - last_valid > 1.0:
+                    _status["connected"] = False
+                    _status["comm_error"] = f"No response from ICC at {config.FURNACE_IP}:{config.FURNACE_PORT_SEND}"
         except Exception as e:
             with _lock:
-                _status["error"] = f"RX error: {e}"
+                _status["connected"] = False
+                _status["comm_error"] = f"RX error: {e}"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -512,20 +607,30 @@ def _real_io_loop():
 # When Flask debug mode is enabled, the reloader forks a child process and
 # re-imports all modules. We only want ONE IO thread, so we check for the
 # WERKZEUG_RUN_MAIN env var which is set in the child process.
-import os
-_is_reloader_child = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
-
-if _is_reloader_child:
-    # This is the Flask reloader child process - start the IO threads
-    threading.Thread(target=_real_io_loop, daemon=True).start()
-    threading.Thread(target=_console_loop, daemon=True).start()
+def start_background_tasks():
+    """Start the background IO and console loops."""
+    global _background_started
+    with _background_lock:
+        if _background_started:
+            return
+        _DriverThread(target=_real_io_loop, daemon=True).start()
+        _DriverThread(target=_console_loop, daemon=True).start()
+        _background_started = True
 
 # ─────────────────────────────────────────────────────────────
 # Public API — main control
 # ─────────────────────────────────────────────────────────────
 def get_status() -> dict:
     with _lock:
+        now = time.time()
+        last_valid_rx = _status.get("last_valid_rx_time", 0.0)
+        connected = bool(last_valid_rx and now - last_valid_rx <= 2.0 and not _status.get("comm_error"))
+        icc_error = bool(_status.get("icc_error", False))
+        status_error = _status.get("comm_error") or _status.get("last_error_msg")
+        if not status_error and icc_error:
+            status_error = "ICC reports an active error bit"
         return {
+            "connected":      connected,
             "enabled":        _ctrl["heating_on"],
             "ctrl_mode":      _ctrl["ctrl_mode"],
             "setpoint":       _ctrl["setpoint_c"],
@@ -544,6 +649,7 @@ def get_status() -> dict:
             "fsm_state":      _status["fsm_state"],
             "ready":          _status["ready"],
             "active":         _status["active"],
+            "icc_error":      icc_error,
             "estop":          _status["estop"],
             "prog_done":      _status["prog_done"],
             "prog_error":     _status["prog_error"],
@@ -556,7 +662,41 @@ def get_status() -> dict:
             "heating_program_phase": _status.get("heating_program_phase", 0),
             "phase_energies":  list(_status["phase_energies"]),
             "phase_temps":     list(_status["phase_temps"]),
-            "error":          _status["last_error_msg"],
+            "error":          status_error,
+            "comm_error":     _status.get("comm_error"),
+            "last_error_msg": _status.get("last_error_msg"),
+            "last_rx_len":    _status.get("last_rx_len", 0),
+            "last_rx_addr":   _status.get("last_rx_addr"),
+            "last_rx_prefix": _status.get("last_rx_prefix"),
+            "tx_count":       _status.get("tx_count", 0),
+            "rx_count":       _status.get("rx_count", 0),
+            "parse_failures": _status.get("parse_failures", 0),
+            "last_valid_rx_age_s": round(now - last_valid_rx, 3) if last_valid_rx else None,
+        }
+
+def get_debug_info() -> dict:
+    with _lock:
+        now = time.time()
+        last_tx = _status.get("last_tx_time", 0.0)
+        last_rx = _status.get("last_rx_time", 0.0)
+        last_valid_rx = _status.get("last_valid_rx_time", 0.0)
+        any_rx = bytes(_last_any_rx_bytes)
+        return {
+            "bind": _status.get("bound_addr") or f"{getattr(config, 'FURNACE_BIND_IP', '')}:{config.FURNACE_PORT_RECV}",
+            "target": f"{config.FURNACE_IP}:{config.FURNACE_PORT_SEND}",
+            "connected": bool(last_valid_rx and now - last_valid_rx <= 2.0 and not _status.get("comm_error")),
+            "comm_error": _status.get("comm_error"),
+            "last_error_msg": _status.get("last_error_msg"),
+            "tx_count": _status.get("tx_count", 0),
+            "rx_count": _status.get("rx_count", 0),
+            "parse_failures": _status.get("parse_failures", 0),
+            "last_tx_age_s": round(now - last_tx, 3) if last_tx else None,
+            "last_rx_age_s": round(now - last_rx, 3) if last_rx else None,
+            "last_valid_rx_age_s": round(now - last_valid_rx, 3) if last_valid_rx else None,
+            "last_rx_len": _status.get("last_rx_len", 0),
+            "last_rx_addr": _status.get("last_rx_addr"),
+            "last_rx_prefix": _status.get("last_rx_prefix"),
+            "last_rx_hex_head": any_rx[:32].hex(" "),
         }
 
 def set_setpoint(setpoint: float) -> dict:
@@ -750,6 +890,7 @@ def get_raw_packets() -> dict:
     with _lock:
         tx = bytes(_last_tx_bytes)
         rx = bytes(_last_rx_bytes)
+    debug = get_debug_info()
 
     # ── TX (PLC → ICC, 28 bytes) ───────────────────────────────
     # Ensure even the inspection values use Big-Endian packing to match reality
@@ -873,6 +1014,7 @@ def get_raw_packets() -> dict:
     return {
         "tx": {"bytes": list(tx), "fields": tx_fields,  "total": len(tx)},
         "rx": {"bytes": list(rx), "fields": rx_fields, "total": len(rx)},
+        "debug": debug,
     }
 
 
@@ -884,18 +1026,17 @@ def get_console_logs() -> list:
 
 def send_console_command(cmd: str) -> bool:
     """Send a custom command string to the console port."""
+    sock = None
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Use a short-lived socket for one-off commands
-        host_ip = getattr(config, "HOST_IP", "")
-        try:
-            sock.bind((host_ip, 0))
-        except:
-            sock.bind(("", 0))
-        sock.sendto(cmd.encode("ascii"), (config.FURNACE_IP, getattr(config, "FURNACE_CONSOLE_PORT", 4661)))
-        sock.close()
+        sock = _make_udp_socket("furnace console command")
+        payload = cmd.strip().encode("ascii") + b"\r\n"
+        dest = (config.FURNACE_IP, getattr(config, "FURNACE_CONSOLE_PORT", 4661))
+        sock = _sendto_or_rebind(sock, payload, dest, "furnace console command")
         return True
     except Exception as e:
         print(f"[furnace console] Send error: {e}")
         return False
+    finally:
+        if sock is not None:
+            sock.close()
 

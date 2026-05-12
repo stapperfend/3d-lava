@@ -546,6 +546,53 @@ body {
   transition: width .5s;
 }
 
+.mod4-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mod4-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--rs);
+  padding: 7px 8px;
+}
+
+.mod4-channel {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  margin-bottom: 4px;
+}
+
+.mod4-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 20px;
+  gap: 4px;
+  align-items: baseline;
+  font-size: 10px;
+}
+
+.mod4-row span,
+.mod4-row em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.mod4-value {
+  color: var(--blue);
+  font-size: 11px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mod4-value.missing {
+  color: var(--muted);
+}
+
 /* â”€â”€ Duet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .duet-state-row {
   display: flex;

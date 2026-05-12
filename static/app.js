@@ -9,7 +9,17 @@
 const el = id => document.getElementById(id);
 const fmt = (v, d = 1) => (v == null || v === "" || isNaN(+v)) ? "—" : (+v).toFixed(d);
 console.log("[APP] v1.1.2 - Active");
-const post = (url, body = {}) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
+const asNumberOrNull = v => (v == null || v === "" || Number.isNaN(Number(v))) ? null : Number(v);
+const DEBUG_TC = false;
+const CHART_LIVE_INTERVAL_MS = 500;
+const MOD4_CHANNELS = 8;
+const requestHeaders = () => {
+  const headers = { "Content-Type": "application/json" };
+  const token = window.PCFG?.controlToken;
+  if (token) headers["X-Control-Token"] = token;
+  return headers;
+};
+const post = (url, body = {}) => fetch(url, { method: "POST", headers: requestHeaders(), body: JSON.stringify(body) }).then(r => r.json());
 const get = url => fetch(url).then(r => r.json());
 
 // ── Heartbeat Helper ───────────────────────────────────────
@@ -129,22 +139,25 @@ function convertTC(id, mv, type, cjc_temp_c = 0.0) {
         }
       }
 
-      console.groupCollapsed(`[TC3-DIAG] @ ${new Date().toLocaleTimeString()} - ${temp?.toFixed(2)}°C`);
-      console.log(`raw_mv:     ${mv.toFixed(4)} mV`);
-      console.log(`cjc_t:      ${cjc_temp_c.toFixed(2)} °C`);
-      console.log(`cjc_mv:     ${mv_cjc.toFixed(4)} mV`);
-      console.log(`total_mv:   ${total_mv.toFixed(4)} mV`);
-      console.log(`calc_temp:  ${temp?.toFixed(3)} °C`);
-      console.log(`delta_ref:  ${deltaRef?.toFixed(3)} °C (vs 9.978)`);
-      console.log(`monotonic:  ${mono} (prev_mv:${_tc3Last.mv?.toFixed(4)} -> curr_mv:${mv.toFixed(4)})`);
-      
-      // Requirement 5: Sanity Check Warning
-      if (Math.abs(mv) < 1.0 && typeof temp === "number") {
-        if (Math.abs(temp - cjc_temp_c) > 10.0) {
-          console.warn("WARNING: Large deviation between TC and CJC (>10°C) — check wiring/polarity!");
+      const isNum = typeof temp === "number";
+      if (DEBUG_TC) {
+        console.groupCollapsed(`[TC3-DIAG] @ ${new Date().toLocaleTimeString()} - ${isNum ? temp.toFixed(2) : temp}°C`);
+        console.log(`raw_mv:     ${mv.toFixed(4)} mV`);
+        console.log(`cjc_t:      ${cjc_temp_c.toFixed(2)} °C`);
+        console.log(`cjc_mv:     ${mv_cjc.toFixed(4)} mV`);
+        console.log(`total_mv:   ${total_mv.toFixed(4)} mV`);
+        console.log(`calc_temp:  ${isNum ? temp.toFixed(3) : temp} °C`);
+        console.log(`delta_ref:  ${isNum ? deltaRef?.toFixed(3) : "N/A"} °C (vs 9.978)`);
+        console.log(`monotonic:  ${mono} (prev_mv:${_tc3Last.mv?.toFixed(4)} -> curr_mv:${mv.toFixed(4)})`);
+
+        // Requirement 5: Sanity Check Warning
+        if (Math.abs(mv) < 1.0 && isNum) {
+          if (Math.abs(temp - cjc_temp_c) > 10.0) {
+            console.warn("WARNING: Large deviation between TC and CJC (>10°C) — check wiring/polarity!");
+          }
         }
+        console.groupEnd();
       }
-      console.groupEnd();
 
       _tc3Last = { mv, t: temp, time: now };
     }
@@ -202,6 +215,7 @@ function appendLog(msg, cls = "log-info") {
 
 // ── SocketIO ────────────────────────────────────────────────
 const socket = io({ transports: ["websocket", "polling"] });
+let _lastChartAppendMs = 0;
 socket.on("connect", () => { el("conn-dot").className = "status-dot connected"; el("conn-label").textContent = "Connected"; appendLog("⚡ Connected.", "log-info"); });
 socket.on("disconnect", () => { el("conn-dot").className = "status-dot disconnected"; el("conn-label").textContent = "Disconnected"; appendLog("✖ Disconnected.", "log-error"); });
 socket.on("status_update", data => {
@@ -209,7 +223,13 @@ socket.on("status_update", data => {
   if (data.duet) { updateDuetUI(data.duet); triggerHB("duet", "rx"); }
   if (data.furnace) { updateFurnaceUI(data.furnace); triggerHB("furnace", "rx"); }
   if (data.traffic) updateTrafficLight(data.traffic);
-  if (data.furnace) _appendChartPoint(data.furnace, data.crio);
+  if (data.furnace) {
+    const now = Date.now();
+    if (now - _lastChartAppendMs >= CHART_LIVE_INTERVAL_MS) {
+      _lastChartAppendMs = now;
+      _appendChartPoint(data.furnace, data.crio);
+    }
+  }
   // Live position → visualizer
   if (data.duet && data.duet.position) {
     const p = data.duet.position;
@@ -252,11 +272,36 @@ function setFurnaceTab(mode) {
 
 // ── cRIO UI ─────────────────────────────────────────────────
 function updateCrioUI(data) {
-  console.log("[CRIO] UI Update:", data);
   const badge = el("crio-status-badge");
   const isConn = data.connected;
-  badge.textContent = isConn ? (data.error ? "ERROR" : "OK") : "OFFLINE";
-  badge.className = "conn-badge " + (isConn ? (data.error ? "error" : "ok") : "error");
+  const serviceState = data.service_state || "";
+  if (badge) {
+    badge.textContent = isConn
+      ? (data.error ? "ERROR" : "OK")
+      : (serviceState === "service_offline" ? "SERVICE OFF" : (data.udp_received ? "UDP STALE" : "OFFLINE"));
+    badge.className = "conn-badge " + (isConn ? (data.error ? "error" : "ok") : "error");
+  }
+
+  const tcpState = el("crio-tcp-state");
+  if (tcpState) {
+    tcpState.textContent = data.tcp_service_online
+      ? "OK"
+      : (data.tcp_error_message || data.tcp_last_error ? "OFF" : "WAIT");
+    tcpState.title = data.tcp_error_message || data.tcp_last_error || "";
+  }
+
+  const udpState = el("crio-udp-state");
+  if (udpState) {
+    if (data.udp_online) {
+      udpState.textContent = `RX ${data.udp_rx_count ?? 0}`;
+    } else if (data.udp_received) {
+      const age = Number(data.last_udp_age_s ?? 0).toFixed(1);
+      udpState.textContent = `STALE ${age}s`;
+    } else {
+      udpState.textContent = "NONE";
+    }
+    udpState.title = data.last_udp_addr ? `Last packet from ${data.last_udp_addr}` : "No UDP packet received";
+  }
 
   // CJC Determination
   let cjcVal = 22.0;
@@ -305,9 +350,27 @@ function updateCrioUI(data) {
   
   const m4 = el("mod4-summary");
   if (m4 && data.mod4) {
-    const v = (data.mod4.volt || []).map(x => x.toFixed(2) + "V").join(", ");
-    const i = (data.mod4.curr || []).map(x => x.toFixed(2) + "mA").join(", ");
+    const v = (data.mod4.volt || []).map(x => x == null || isNaN(+x) ? "---" : (+x).toFixed(2) + "V").join(", ");
+    const i = (data.mod4.curr || []).map(x => x == null || isNaN(+x) ? "---" : (+x).toFixed(2) + "mA").join(", ");
     m4.textContent = `U: [${v}] | I: [${i}]`;
+  }
+  if (data.mod4) {
+    const volt = data.mod4.volt || [];
+    const curr = data.mod4.curr || [];
+    for (let idx = 0; idx < MOD4_CHANNELS; idx++) {
+      const vEl = el(`mod4-v-${idx}`);
+      const iEl = el(`mod4-i-${idx}`);
+      const vVal = asNumberOrNull(volt[idx]);
+      const iVal = asNumberOrNull(curr[idx]);
+      if (vEl) {
+        vEl.textContent = vVal === null ? "---" : vVal.toFixed(3);
+        vEl.classList.toggle("missing", vVal === null);
+      }
+      if (iEl) {
+        iEl.textContent = iVal === null ? "---" : iVal.toFixed(4);
+        iEl.classList.toggle("missing", iVal === null);
+      }
+    }
   }
 
   const pi = data.pyro_info || {};
@@ -418,23 +481,33 @@ function updateWorkflowUI({ state: wf, loop_count }) {
 // ── Furnace UI ──────────────────────────────────────────────
 function updateFurnaceUI(data) {
   const badge = el("furnace-status-badge");
-  badge.textContent = data.error ? "ERROR" : "OK";
-  badge.className = "conn-badge " + (data.error ? "error" : "ok");
+  const furnaceOnline = data.connected !== false;
+  badge.textContent = furnaceOnline ? (data.error ? "ERROR" : "OK") : "OFFLINE";
+  badge.className = "conn-badge " + (furnaceOnline && !data.error ? "ok" : "error");
+  badge.title = data.error || data.comm_error || "";
 
   // Gauge
-  const actual = parseFloat(data.actual ?? 0);
-  const pct = Math.min(1, actual / window.PCFG.furnaceMax);
+  const rawActual = data.actual ?? 0;
+  const isCold = rawActual === "Cold";
+  const actual = isCold ? 0 : asNumberOrNull(rawActual);
+  const actualForGauge = actual ?? 0;
+  const pct = Math.min(1, actualForGauge / window.PCFG.furnaceMax);
   const h = Math.round(30 - pct * 30);
-  if (el("furnace-actual")) { el("furnace-actual").textContent = fmt(actual, 1); el("furnace-actual").style.color = `hsl(${h},95%,60%)`; }
+  if (el("furnace-actual")) {
+    el("furnace-actual").textContent = isCold ? "Cold" : fmt(actual, 1);
+    el("furnace-actual").style.color = isCold ? "var(--blue)" : `hsl(${h},95%,60%)`;
+  }
   const arc = el("gauge-arc");
-  if (arc) { arc.style.strokeDashoffset = (226 * (1 - pct)).toFixed(1); arc.style.stroke = `hsl(${h},95%,55%)`; }
-  if (el("gauge-pct")) el("gauge-pct").textContent = Math.round(pct * 100) + "%";
+  if (arc) { arc.style.strokeDashoffset = (226 * (1 - pct)).toFixed(1); arc.style.stroke = isCold ? "var(--blue)" : `hsl(${h},95%,55%)`; }
+  if (el("gauge-pct")) el("gauge-pct").textContent = isCold ? "0%" : Math.round(pct * 100) + "%";
 
   // FSM
   const fsmEl = el("furnace-fsm");
   if (fsmEl) {
-    fsmEl.textContent = data.fsm_state || "—";
-    fsmEl.style.color = data.fsm_state === "Active" ? "var(--green)" : data.fsm_state === "Error" ? "var(--red)" : "var(--muted)";
+    fsmEl.textContent = furnaceOnline ? (data.fsm_state || "—") : (data.error || "OFFLINE");
+    fsmEl.style.color = furnaceOnline
+      ? (data.fsm_state === "Active" ? "var(--green)" : data.fsm_state === "Error" ? "var(--red)" : "var(--muted)")
+      : "var(--red)";
   }
 
   // Enable state
@@ -508,7 +581,7 @@ function updateFurnaceUI(data) {
   }
 
   const sp = data.target_temp || data.temp_sp || 0;
-  const fmap = { ready: data.ready, active: data.active, error: data.error, estop: data.estop, prog_done: data.prog_done, prog_error: data.prog_error };
+  const fmap = { ready: data.ready, active: data.active, error: data.icc_error || data.error, estop: data.estop, prog_done: data.prog_done, prog_error: data.prog_error };
   for (const [key, val] of Object.entries(fmap)) {
     const f = el(`flag-${key}`); if (!f) continue;
     f.classList.remove("active", "flag-error");
@@ -803,22 +876,27 @@ function closeProtoModal() {
       const txBox = el("crio-tx-dump");
       const rxBox = el("crio-rx-dump");
       const telemetryBox = el("crio-telemetry-dump");
+      const jsonish = (value) => {
+        if (value === null || value === undefined || value === "") return "{}";
+        if (typeof value !== "string") return JSON.stringify(value, null, 2);
+        try { return JSON.stringify(JSON.parse(value), null, 2); }
+        catch { return value; }
+      };
+      const setPre = (box, color, text) => {
+        if (!box) return;
+        box.innerHTML = `<pre style="color:${color}; font-size:11px; padding:10px;"></pre>`;
+        box.querySelector("pre").textContent = text;
+      };
 
-      if (txBox) {
-          const parsed = JSON.parse(data.tx || "{}");
-          txBox.innerHTML = `<pre style="color:var(--purple); font-size:11px; padding:10px;">${JSON.stringify(parsed, null, 2)}</pre>`;
-      }
-      if (rxBox) {
-          const parsed = JSON.parse(data.rx || "{}");
-          rxBox.innerHTML = `<pre style="color:var(--blue); font-size:11px; padding:10px;">${JSON.stringify(parsed, null, 2)}</pre>`;
-      }
-      if (telemetryBox) {
-          telemetryBox.innerHTML = `<pre style="color:var(--green); font-size:11px; padding:10px;">${JSON.stringify(data.telemetry || {}, null, 2)}</pre>`;
-      }
+      setPre(txBox, "var(--purple)", jsonish(data.tx));
+      setPre(rxBox, "var(--blue)", jsonish(data.rx));
+      setPre(telemetryBox, "var(--green)", jsonish(data.telemetry || {}));
 
       const hbStatus = el("crio-hb-status");
-      if (hbStatus && data.heartbeat_tx) {
-          hbStatus.textContent = `OK (${data.heartbeat_tx.substring(0, 20)}...)`;
+      if (hbStatus && data.debug) {
+          const tcp = data.debug.tcp_service_online ? "TCP OK" : "TCP OFF";
+          const udp = data.debug.udp_online ? `UDP RX ${data.debug.udp_rx_count}` : (data.debug.udp_received ? "UDP STALE" : "UDP NONE");
+          hbStatus.textContent = `${tcp} | ${udp}`;
       }
 
       // Auto-refresh logic if visible
@@ -1185,7 +1263,7 @@ function _samplesToDatasets(samples) {
       } else {
         val = s[d._key] ?? null;
       }
-      d.data.push({ x: ms, y: val === null ? null : parseFloat(val) });
+      d.data.push({ x: ms, y: asNumberOrNull(val) });
     });
   });
   _chart.update("none");
@@ -1223,10 +1301,14 @@ function _appendChartPoint(furnaceData, crioData) {
       }
     }
   }
+  const crioMod4 = {
+    volt: Array.from(crioData?.mod4?.volt || []),
+    curr: Array.from(crioData?.mod4?.curr || []),
+  };
 
   const s = {
     t: now / 1000,
-    temp: furnaceData.actual,
+    temp: asNumberOrNull(furnaceData.actual),
     power: furnaceData.actual_power,
     current: furnaceData.actual_current,
     freq: furnaceData.actual_freq,
@@ -1235,6 +1317,7 @@ function _appendChartPoint(furnaceData, crioData) {
     cap_v: furnaceData.cap_voltage,
     dc_v: furnaceData.dc_voltage,
     crio_temps: convertedTemps,
+    crio_mod4: crioMod4,
   };
   _chartData.push(s);
 
@@ -1256,7 +1339,7 @@ function _appendChartPoint(furnaceData, crioData) {
     } else {
       val = s[d._key] ?? null;
     }
-    d.data.push({ x: now, y: val === null ? null : parseFloat(val) });
+    d.data.push({ x: now, y: asNumberOrNull(val) });
   });
   _chart.update("none");
 }
@@ -1268,17 +1351,50 @@ function setChartWindow(mode) {
   fetchHistory();
 }
 
+async function resetGraph() {
+  if (!window.confirm("Clear the graph and all in-memory history for this session?")) return;
+  const btn = el("chart-reset-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await post("/api/history/clear", {});
+    if (!res.ok) {
+      appendLog(`✖ Graph reset failed: ${res.error || "unknown error"}`, "log-error");
+      return;
+    }
+    _chartData = [];
+    if (_chart) {
+      _chart.data.datasets.forEach(d => { d.data = []; });
+      _chart.update("none");
+    }
+    appendLog("Graph reset.", "log-info");
+  } catch (e) {
+    appendLog(`✖ Graph reset failed: ${e.message || e}`, "log-error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function downloadCSV() {
   if (!_chartData.length) return;
   // Build header row
+  const mod4VoltCols = Array.from({ length: MOD4_CHANNELS }, (_, i) => `mod4_volt_${i}_V`);
+  const mod4CurrCols = Array.from({ length: MOD4_CHANNELS }, (_, i) => `mod4_curr_${i}_mA`);
   const cols = ["timestamp", "temp_C", "power_W", "current_A", "freq_Hz",
     "water_lpm", "energy_Ws", "cap_voltage_V", "dc_voltage_V",
-    "crio_temp1_C", "crio_temp2_C", "crio_temp3_C", "crio_temp4_C"];
+    "crio_temp1_C", "crio_temp2_C", "crio_temp3_C", "crio_temp4_C",
+    ...mod4VoltCols, ...mod4CurrCols];
   const rows = [cols.join(",")];
 
   _chartData.forEach(s => {
     const ts = new Date(s.t * 1000).toISOString();
     const ct = s.crio_temps || {};
+    const m4 = s.crio_mod4 || {};
+    const volt = m4.volt || [];
+    const curr = m4.curr || [];
+    const mod4Values = [
+      ...Array.from({ length: MOD4_CHANNELS }, (_, i) => volt[i] ?? ""),
+      ...Array.from({ length: MOD4_CHANNELS }, (_, i) => curr[i] ?? ""),
+    ];
     rows.push([
       ts,
       s.temp ?? "",
@@ -1293,6 +1409,7 @@ function downloadCSV() {
       ct["temp_1"] ?? "",
       ct["temp_2"] ?? "",
       ct["temp_3"] ?? "",
+      ...mod4Values,
     ].join(","));
   });
 

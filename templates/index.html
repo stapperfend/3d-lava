@@ -51,7 +51,7 @@
         <div style="display:flex; flex-direction:column;">
           <h2 style="margin:0">NI cRIO Controller</h2>
           <div class="card-subtitle mono" style="font-size:10px; opacity:0.7;">
-            {{ crio_ip }} | TS: <span id="crio-ts">---</span> | SEQ: <span id="crio-seq">---</span>
+            {{ crio_ip }} | TCP: <span id="crio-tcp-state">---</span> | UDP: <span id="crio-udp-state">---</span> | TS: <span id="crio-ts">---</span> | SEQ: <span id="crio-seq">---</span>
           </div>
         </div>
         <div class="heartbeat-wrap" id="crio-hb">
@@ -157,6 +157,25 @@
             </div>
           </div>
           {% endif %}
+          {% endfor %}
+        </div>
+
+        <div class="section-label" style="margin-top:12px;">Mod4 Voltage / Current</div>
+        <div class="mod4-grid">
+          {% for idx in range(8) %}
+          <div class="mod4-card">
+            <div class="mod4-channel">AI {{ idx }}</div>
+            <div class="mod4-row">
+              <span>U</span>
+              <strong class="mono mod4-value" id="mod4-v-{{ idx }}">---</strong>
+              <em>V</em>
+            </div>
+            <div class="mod4-row">
+              <span>I</span>
+              <strong class="mono mod4-value" id="mod4-i-{{ idx }}">---</strong>
+              <em>mA</em>
+            </div>
+          </div>
           {% endfor %}
         </div>
 
@@ -488,7 +507,9 @@
               onchange="setChartWindow('window')" /> min
           </label>
         </div>
-        <button class="btn btn-xs" id="chart-dl-btn" onclick="downloadCSV()" style="margin-left:auto"
+        <button class="btn btn-xs" id="chart-reset-btn" onclick="resetGraph()" style="margin-left:auto"
+          title="Clear the graph and in-memory history">Reset Graph</button>
+        <button class="btn btn-xs" id="chart-dl-btn" onclick="downloadCSV()"
           title="Download visible data as CSV">⬇ Download Total Data</button>
       </div>
       <div class="chart-card-body">
@@ -689,7 +710,8 @@
         relayChannels: {{ relay_channels | tojson }},
         tempChannels:  {{ temp_channels | tojson }},
         trafficRelays: {{ traffic_relays | tojson }},
-        cameras:       {{ cameras_list | tojson }}
+        cameras:       {{ cameras_list | tojson }},
+        controlToken:  {{ control_token | tojson }}
     };
 
   </script>

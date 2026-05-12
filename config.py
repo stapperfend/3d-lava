@@ -1,3 +1,5 @@
+import os
+
 # Global mode: Real hardware only
 
 # ---------------------------------------------------------------------------
@@ -54,16 +56,21 @@ DUET_TIMEOUT = 5.0
 # ---------------------------------------------------------------------------
 FURNACE_IP           = "192.168.137.191"
 HOST_IP              = "192.168.137.1" # Force UDP to use the physical Ethernet adapter
+FURNACE_BIND_IP      = HOST_IP         # Bind cyclic furnace status to the physical Ethernet adapter
 FURNACE_PORT_SEND    = 5010    # Main control  telegrams  → ICC (section 9.1)
 FURNACE_PORT_RECV    = 5010    # Main status   telegrams ← ICC (section 9.2)
 FURNACE_SERVICE_PORT = 4660    # Service protocol: heating programs (section 9.4)
 FURNACE_CONSOLE_PORT = 4661    # Text console — send "HELLO" to activate
-FURNACE_TIMEOUT         = 0.05    # Prevent Python from stalling and missing the hardware 500ms keep-alive
+FURNACE_TIMEOUT         = 0.20    # Keep receive window comfortably above the ICC 100ms status cadence
 FURNACE_SERVICE_TIMEOUT = 1.0     # More relaxed timeout for retrieval of programs/diagnostics
 
 # Furnace setpoint limits (safety clamp)
 FURNACE_MIN_SP = 0.0
 FURNACE_MAX_SP = 1600.0   # °C
+
+# Temperature calibration
+FURNACE_TEMP_OFFSET = 385.0
+FURNACE_COLD_THRESHOLD = 2.0
 
 # Number of heating programs the ICC can store (section 9.5)
 FURNACE_NUM_PROGRAMS = 100
@@ -96,9 +103,10 @@ CAMERAS = {
 FLASK_HOST  = "0.0.0.0"
 FLASK_PORT  = 5000
 FLASK_DEBUG = True
+CONTROL_API_TOKEN = os.getenv("CONTROL_API_TOKEN", "")
 STATUS_POLL_INTERVAL_MS = 200   # default interval
 
 # Parallel refresh intervals (for the decoupling broadcaster)
-CRIO_UPDATE_MS      = 250   # 4Hz
+CRIO_UPDATE_MS      = 500   # 2Hz GUI refresh; UDP telemetry still arrives at cRIO rate
 DUET_UPDATE_MS      = 500   # 2Hz
-FURNACE_UPDATE_MS   = 100   # 10Hz (Safety critical)
+FURNACE_UPDATE_MS   = 250   # 4Hz GUI refresh; furnace driver control loop still runs at 20Hz
